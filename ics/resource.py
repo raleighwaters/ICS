@@ -9,6 +9,8 @@ from ics.attributes import AttributeObject, resource_attributes, group_attribute
 from ics.states import ResourceStates, GroupStates, ONLINE_STATES
 from ics.utils import resource_log_name
 
+from ics.models_specs import ResourceSpec, GroupSpec
+
 logger = logging.getLogger(__name__)
 
 alert = AlertClient()
@@ -41,6 +43,26 @@ class Resource(AttributeObject):
         ResourceStates.FAULTED: events.ResourceFaultedEvent,
         ResourceStates.UNKNOWN: events.ResourceUnknownEvent
     }
+
+    def to_spec(self) -> ResourceSpec:
+        return ResourceSpec(
+            name=self.name,
+            group=self.attr_value("Group"),
+            enabled=self.attr_value("Enabled") == "true",
+            startProgram=self.attr_value("StartProgram"),
+            stopProgram=self.attr_value("StopProgram"),
+            monitorProgram=self.attr_value("MonitorProgram"),
+            faultPropagation=self.attr_value("FaultPropagation") == "true",
+            onlineRetryLimit=int(self.attr_value("OnlineRetryLimit")),
+            restartLimit=int(self.attr_value("RestartLimit")),
+            monitorOnly=self.attr_value("MonitorOnly") == "true",
+            monitorInterval=int(self.attr_value("MonitorInterval")),
+            offlineMonitorInterval=int(self.attr_value("OfflineMonitorInterval")),
+            onlineTimeout=int(self.attr_value("OnlineTimeout")),
+            offlineTimeout=int(self.attr_value("OfflineTimeout")),
+            monitorTimeout=int(self.attr_value("MonitorTimeout")),
+            load=int(self.attr_value("Load")),
+        )
 
     def change_state(self, new_state, force=False):
         """Change state of resource and add event to queue.
@@ -365,6 +387,16 @@ class Group(AttributeObject):
         self.init_attr(group_attributes)
         self.name = name
         self.members = []  # TODO: rename member for group class?
+
+    def to_spec(self) -> GroupSpec:
+        return GroupSpec(
+            name=self.name,
+            systemList=self.attr_value("SystemList"),
+            enabled=self.attr_value("Enabled") == "true",
+            autoStart=self.attr_value("AutoStart") == "true",
+            ignoreDisabled=self.attr_value("IgnoreDisabled") == "true",
+            parallel=self.attr_value("Parallel") == "true",
+        )
 
     def state(self):
         """Get state of group by checking state of member resources.
