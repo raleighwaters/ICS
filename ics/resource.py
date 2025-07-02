@@ -9,7 +9,7 @@ from ics.attributes import AttributeObject, resource_attributes, group_attribute
 from ics.states import ResourceStates, GroupStates, ONLINE_STATES
 from ics.utils import resource_log_name
 
-from ics.models_specs import ResourceSpec, GroupSpec
+from ics.models import ResourceSpec, GroupSpec
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from ics.models_specs import ResourceSpec, GroupSpec
+from ics.models import ResourceSpec, GroupSpec
 
 
 def create_api(system):
