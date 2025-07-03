@@ -13,6 +13,7 @@ from ics.system import NodeSystem
 from ics.alerts import AlertHandler
 from ics.environment import ICS_ALERT_PORT
 
+
 def start_api(system):
     app = create_api(system)
     uvicorn.run(app, host="0.0.0.0", port=5000)
@@ -48,12 +49,12 @@ def start_alert_server():
         verbose=False
     )
 
+
 def main():
     setup_logging()
     logger = logging.getLogger("icsd")
     logger.info("Starting ICS Daemon")
     logger.info('Python version: ' + sys.version.replace('\n', ''))
-
 
     system = NodeSystem()
 
@@ -70,6 +71,7 @@ def main():
     # Run FastAPI in main thread
     logger.info("FastAPI server started on port 5000")
     start_api(system)
+
 
 if __name__ == "__main__":
     main()
