@@ -20,6 +20,8 @@ class ResourceSpec(BaseModel):
     monitorTimeout: int = 60
     load: int = 1
 
+    dependsOn: Optional[List[str]] = []
+
 
 class GroupSpec(BaseModel):
     name: str

@@ -44,6 +44,16 @@ def create_api(system):
         for key, value in attr_map.items():
             system.res_modify(resource.name, key, value)
 
+        # Add dependency links
+        if resource.dependsOn:
+            for parent in resource.dependsOn:
+                if parent not in system.res_list():
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Dependency '{parent}' not found for resource '{resource.name}'"
+                    )
+                system.res_link(resource.name, parent)
+
         return {"status": "added", "name": resource.name}
 
 
