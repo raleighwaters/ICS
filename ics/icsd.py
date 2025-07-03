@@ -7,7 +7,7 @@ import sys
 import Pyro4 as Pyro
 
 from ics.api import create_api
-from ics.logging_new import setup_logging
+from ics.logging_config import setup_logging
 from ics.environment import ICS_ENGINE_PORT
 from ics.system import NodeSystem
 from ics.alerts import AlertHandler
