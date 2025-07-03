@@ -83,7 +83,7 @@ def create_api(system):
             "AutoStart": str(group.autoStart).lower(),
             "IgnoreDisabled": str(group.ignoreDisabled).lower(),
             "Parallel": str(group.parallel).lower(),
-            "SystemList": ','.join(group.systemList),
+            "SystemList": group.systemList,
         }
 
         for key, value in attr_map.items():
