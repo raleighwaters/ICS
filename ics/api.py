@@ -16,7 +16,6 @@ def create_api(system):
     async def list_resources():
         return {"resources": system.res_list()}
 
-
     @app.post("/resources")
     async def add_resources(resource: ResourceSpec):
         if resource.name in system.res_list():
@@ -56,7 +55,6 @@ def create_api(system):
 
         return {"status": "added", "name": resource.name}
 
-
     @app.get("/resources/{name}")
     async def get_resource(name: str):
         if name not in system.res_list():
@@ -64,7 +62,6 @@ def create_api(system):
 
         resource = system.get_resource(name)
         return resource.to_spec()
-
 
     @app.delete("/resources/{name}")
     async def delete_resource(name: str):
@@ -79,7 +76,6 @@ def create_api(system):
     @app.get("/groups")
     async def list_groups():
         return {"groups": system.grp_list()}
-
 
     @app.post("/groups")
     async def add_group(group: GroupSpec):
@@ -101,7 +97,6 @@ def create_api(system):
 
         return {"status": "added", "name": group.name}
 
-
     @app.get("/groups/{name}")
     async def get_group(name: str):
         if name not in system.grp_list():
@@ -110,7 +105,6 @@ def create_api(system):
         group = system.get_group(name)
         return group.to_spec()
 
-
     @app.delete("/groups/{name}")
     async def delete_group(name: str):
         if name not in system.grp_list():
@@ -118,6 +112,5 @@ def create_api(system):
 
         system.grp_delete(name)
         return {"status": "deleted", "name": name}
-
 
     return app
