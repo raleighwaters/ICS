@@ -1,62 +1,75 @@
-import logging.config
-import os
+import logging
+import uvicorn
 import socket
+import threading
 import sys
 
 import Pyro4 as Pyro
 
-from ics import utils
-from ics.environment import ICS_DAEMON_PORT
-from ics.environment import ICS_LOG
-from ics.server_control import SubServerControl
+from ics.api import create_api
+from ics.logging_new import setup_logging
+from ics.environment import ICS_ENGINE_PORT
+from ics.system import NodeSystem
+from ics.alerts import AlertHandler
+from ics.environment import ICS_ALERT_PORT
+
+def start_api(system):
+    app = create_api(system)
+    uvicorn.run(app, host="0.0.0.0", port=5000)
 
 
-def main():
-    if not os.path.isdir(ICS_LOG):
-        try:
-            os.makedirs(ICS_LOG)
-        except OSError as e:
-            print('ERROR: Unable to create log directory: {}'.format(e))
-            print('Exiting...')
-            sys.exit(1)
-
-    logging.logFilename = ICS_LOG + '/icsd.log'
-    if os.getenv('ICS_CONSOLE_LOG') is not None:
-        log_config = os.path.dirname(__file__) + '/logging_console.conf'
-    else:
-        log_config = os.path.dirname(__file__) + '/logging.conf'
-
-    try:
-        logging.config.fileConfig(log_config)
-    except IOError as e:
-        print('ERROR: Unable to create log file: {}'.format(e))
-        sys.exit(1)
-
-    logger = logging.getLogger('main')
-    logger.info('Starting ICS daemon...')
-    logger.info('ICS Version: ' + utils.ics_version())
-    logger.info('Python version: ' + sys.version.replace('\n', ''))
-    logger.info('Logging level: ' + logging.getLevelName(logger.getEffectiveLevel()))
-
-    # Setup Pyro logging
-    logging.getLogger("Pyro4").setLevel(logging.INFO)
-    logging.getLogger("Pyro4.core").setLevel(logging.INFO)
-
-    utils.setup_signal_handler()
-
-    sub_server_control = SubServerControl()
-
-    logger.info("Starting Pyro on port " + str(ICS_DAEMON_PORT))
-
+def start_system_server(system):
+    system.startup()
     Pyro.Daemon.serveSimple(
         {
-            sub_server_control: 'sub_server_control'
+            system: 'system'
         },
-        port=ICS_DAEMON_PORT,
+        port=ICS_ENGINE_PORT,
         host=socket.gethostname(),
         ns=False,
         verbose=False)
 
 
-if __name__ == '__main__':
+def start_alert_server():
+    alert_handler = AlertHandler()
+
+    # Start alert handler thread (for processing the alert queue)
+    handler_thread = threading.Thread(target=alert_handler.run, name="alert-handler", daemon=True)
+    handler_thread.start()
+
+    # Expose it over Pyro
+    Pyro.Daemon.serveSimple(
+        {
+            alert_handler: 'alert_handler'
+        },
+        port=ICS_ALERT_PORT,
+        host=socket.gethostname(),
+        ns=False,
+        verbose=False
+    )
+
+def main():
+    setup_logging()
+    logger = logging.getLogger("icsd")
+    logger.info("Starting ICS Daemon")
+    logger.info('Python version: ' + sys.version.replace('\n', ''))
+
+
+    system = NodeSystem()
+
+    # Start Pyro engine thread
+    engine_thread = threading.Thread(target=start_system_server, args=(system,), daemon=True)
+    engine_thread.start()
+    logger.info(f"NodeSystem Pyro started on port {ICS_ENGINE_PORT}")
+
+    # Start AlertServer Pyro thread
+    alert_thread = threading.Thread(target=start_alert_server, daemon=True)
+    alert_thread.start()
+    logger.info(f"AlertServer Pyro started on port {ICS_ALERT_PORT}")
+
+    # Run FastAPI in main thread
+    logger.info("FastAPI server started on port 5000")
+    start_api(system)
+
+if __name__ == "__main__":
     main()
