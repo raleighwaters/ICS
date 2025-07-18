@@ -15,7 +15,7 @@ from ics.alerts import AlertHandler
 
 def start_api(system):
     app = create_api(system)
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(app, host="0.0.0.0", port=settings.api_port)
 
 
 def start_system_server(system):

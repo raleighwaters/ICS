@@ -30,6 +30,7 @@ class ICSSettings(BaseSettings):
     daemon_port: int = Field(9090)
     engine_port: int = Field(9091)
     alert_port: int = Field(9092)
+    api_port: int = Field(5000)
 
     alert_recipients: Optional[List[str]] = None
     alert_level: str = Field("NOTSET")
