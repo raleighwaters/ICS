@@ -48,6 +48,7 @@ def start_alert_server():
         verbose=False
     )
 
+
 def main():
     setup_logging()
     logger = logging.getLogger("icsd")
@@ -71,6 +72,7 @@ def main():
     # Run FastAPI in main thread
     logger.info("FastAPI server started on port 5000")
     start_api(system)
+
 
 if __name__ == "__main__":
     main()
