@@ -8,12 +8,7 @@ from socket import gethostname
 
 import Pyro4 as Pyro
 
-from ics.environment import ICS_ALERT_LOG
-from ics.environment import ICS_ALERT_PORT
-from ics.environment import ICS_DAEMON_PORT
-from ics.environment import ICS_ENGINE_PORT
-from ics.environment import ICS_RES_LOG
-from ics.environment import ICS_VAR
+from ics.settings import settings
 from ics.errors import ICSError
 
 logger = logging.getLogger(__name__)
@@ -60,7 +55,7 @@ def pid_filename(name):
         str: Full path of PID file.
 
     """
-    return ICS_VAR + '/{}.pid'.format(name)
+    return settings.var_dir + '/{}.pid'.format(name)
 
 
 def get_ics_pid(server):
@@ -204,24 +199,24 @@ def ics_version():
 
 def resource_log_name():
     """Resource log file name."""
-    return ICS_RES_LOG + '.' + datetime.now().strftime('%Y-%m-%d_%H')
+    return settings.res_log + '.' + datetime.now().strftime('%Y-%m-%d_%H')
 
 
 def alert_log_name():
     """Alert log file name."""
-    return ICS_ALERT_LOG + '.' + datetime.now().strftime('%Y-%m-%d_%H')
+    return settings.alert_log + '.' + datetime.now().strftime('%Y-%m-%d_%H')
 
 
 def daemon_conn():
-    uri = 'PYRO:sub_server_control@' + gethostname() + ':' + str(ICS_DAEMON_PORT)
+    uri = 'PYRO:sub_server_control@' + gethostname() + ':' + str(settings.daemon_port)
     return Pyro.Proxy(uri)
 
 
 def engine_conn():
-    uri = 'PYRO:system@' + gethostname() + ':' + str(ICS_ENGINE_PORT)
+    uri = 'PYRO:system@' + gethostname() + ':' + str(settings.engine_port)
     return Pyro.Proxy(uri)
 
 
 def alert_conn():
-    uri = 'PYRO:alert_handler@' + gethostname() + ':' + str(ICS_ALERT_PORT)
+    uri = 'PYRO:alert_handler@' + gethostname() + ':' + str(settings.alert_port)
     return Pyro.Proxy(uri)

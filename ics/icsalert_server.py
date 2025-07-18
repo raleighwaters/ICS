@@ -6,21 +6,20 @@ import threading
 
 import Pyro4 as Pyro
 
+from ics.settings import settings
 from ics.alerts import AlertHandler
-from ics.environment import ICS_ALERT_PORT
-from ics.environment import ICS_LOG
 from ics.utils import ics_version
 
-if not os.path.isdir(ICS_LOG):
+if not os.path.isdir(settings.log_dir):
     try:
-        os.makedirs(ICS_LOG)
+        os.makedirs(settings.log_dir)
     except OSError as e:
         print('ERROR: Unable to create log directory: {}'.format(e))
         print('Exiting...')
         sys.exit(1)
 
 # TODO: Check if file path exists
-logging.logFilename = ICS_LOG + '/icsserver_alert.log'
+logging.logFilename = settings.log_dir + '/icsserver_alert.log'
 if os.getenv('ICS_CONSOLE_LOG') is not None:
     log_config = os.path.dirname(__file__) + '/logging_console.conf'
 else:
@@ -51,13 +50,13 @@ thread_alert_handler = threading.Thread(name='alert handler', target=alert_handl
 thread_alert_handler.daemon = True
 thread_alert_handler.start()
 
-logger.info("Starting Pyro on port " + str(ICS_ALERT_PORT))
+logger.info("Starting Pyro on port " + str(settings.alert_port))
 
 Pyro.Daemon.serveSimple(
     {
         alert_handler: 'alert_handler'
     },
-    port=ICS_ALERT_PORT,
+    port=settings.alert_port,
     host=socket.gethostname(),
     ns=False,
     verbose=False)

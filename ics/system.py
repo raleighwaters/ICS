@@ -11,9 +11,7 @@ from shutil import copyfile
 import Pyro4 as Pyro
 
 from ics.attributes import AttributeObject, system_attributes
-from ics.environment import ICS_CONF
-from ics.environment import ICS_CONF_FILE
-from ics.environment import ICS_ENGINE_PORT
+from ics.settings import settings
 from ics.errors import ICSError
 from ics.events import event_handler
 from ics.resource import Resource, Group
@@ -198,7 +196,7 @@ class NodeSystem(AttributeObject):
             logger.error("Unable to register self ({}) as a remote node".format(self.node_name))
             return
 
-        uri = 'PYRO:system@' + str(host) + ':' + str(ICS_ENGINE_PORT)
+        uri = 'PYRO:system@' + str(host) + ':' + str(settings.engine_port)
         self.remote_nodes[host] = Pyro.Proxy(uri)
 
     @Pyro.expose
@@ -1643,13 +1641,13 @@ class NodeSystem(AttributeObject):
                 AttributeObject.update_flag = False
                 self.config_update = False
                 logger.debug('Creating backup of config file')
-                if os.path.isfile(ICS_CONF_FILE):
-                    os.rename(ICS_CONF_FILE, ICS_CONF_FILE + '.autobackup')
-                write_config(ICS_CONF_FILE, self.config_data())
+                if os.path.isfile(settings.conf_file):
+                    os.rename(settings.conf_file, settings.conf_file + '.autobackup')
+                write_config(settings.conf_file, self.config_data())
 
-                backup_file = ICS_CONF_FILE + '.' + datetime.now().strftime('%y%m%d_%H%M%S')
+                backup_file = settings.conf_file + '.' + datetime.now().strftime('%y%m%d_%H%M%S')
                 logger.info('Creating backup config ' + backup_file)
-                copyfile(ICS_CONF_FILE, backup_file)
+                copyfile(settings.conf_file, backup_file)
 
             time.sleep(interval * 60)
 
@@ -1659,10 +1657,10 @@ class NodeSystem(AttributeObject):
         # TODO: Add config startup management here
         data = {}
         try:
-            data = read_config(ICS_CONF_FILE)
+            data = read_config(settings.conf_file)
         except FileNotFoundError:
-            if not os.path.exists(ICS_CONF):
-                os.makedirs(ICS_CONF)
+            if not os.path.exists(settings.conf_dir):
+                os.makedirs(settings.conf_dir)
 
         if data:
             try:
@@ -1703,7 +1701,7 @@ class NodeSystem(AttributeObject):
     def shutdown(self):
         """Shutdown systemm."""
         logger.info('Server shutting down...')
-        write_config(ICS_CONF_FILE, self.config_data())
+        write_config(settings.conf_file, self.config_data())
         self.poll_enabled = False
         logger.info('Server shutdown complete')
         logger.shutdown()

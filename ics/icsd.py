@@ -6,12 +6,12 @@ import sys
 
 import Pyro4 as Pyro
 
+from ics.settings import settings
 from ics.api import create_api
 from ics.logging_config import setup_logging
-from ics.environment import ICS_ENGINE_PORT
 from ics.system import NodeSystem
 from ics.alerts import AlertHandler
-from ics.environment import ICS_ALERT_PORT
+
 
 def start_api(system):
     app = create_api(system)
@@ -24,7 +24,7 @@ def start_system_server(system):
         {
             system: 'system'
         },
-        port=ICS_ENGINE_PORT,
+        port=settings.engine_port,
         host=socket.gethostname(),
         ns=False,
         verbose=False)
@@ -42,7 +42,7 @@ def start_alert_server():
         {
             alert_handler: 'alert_handler'
         },
-        port=ICS_ALERT_PORT,
+        port=settings.alert_port,
         host=socket.gethostname(),
         ns=False,
         verbose=False
@@ -54,18 +54,19 @@ def main():
     logger.info("Starting ICS Daemon")
     logger.info('Python version: ' + sys.version.replace('\n', ''))
 
+    settings.log_settings()
 
     system = NodeSystem()
 
     # Start Pyro engine thread
     engine_thread = threading.Thread(target=start_system_server, args=(system,), daemon=True)
     engine_thread.start()
-    logger.info(f"NodeSystem Pyro started on port {ICS_ENGINE_PORT}")
+    logger.info(f"NodeSystem Pyro started on port {settings.engine_port}")
 
     # Start AlertServer Pyro thread
     alert_thread = threading.Thread(target=start_alert_server, daemon=True)
     alert_thread.start()
-    logger.info(f"AlertServer Pyro started on port {ICS_ALERT_PORT}")
+    logger.info(f"AlertServer Pyro started on port {settings.alert_port}")
 
     # Run FastAPI in main thread
     logger.info("FastAPI server started on port 5000")

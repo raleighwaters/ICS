@@ -2,8 +2,7 @@ import json
 import logging
 import os
 
-from ics.environment import ICS_CONF
-from ics.environment import ICS_CONF_FILE
+from ics.settings import settings
 from ics.resource import get_resource
 from ics.resource import grp_add
 from ics.resource import res_add
@@ -35,11 +34,11 @@ def write_json(filename, data):
 def load_config():
     """Read ICS configuration from file"""
     logger.info('Loading from config file')
-    if not os.path.isfile(ICS_CONF_FILE):
+    if not os.path.isfile(settings.conf_file):
         logger.info('No config file found, skipping load')
         return
 
-    data_dict = read_json(ICS_CONF_FILE)
+    data_dict = read_json(settings.conf_file)
 
     for group_name in data_dict.keys():
         grp_add(group_name)
@@ -56,7 +55,7 @@ def load_config():
             for parent_name in data_dict[group_name][resource_name]['dependencies']:
                 res_link(parent_name, resource_name)
 
-    logger.debug('Resource configuration loaded from file {}'.format(ICS_CONF_FILE))
+    logger.debug('Resource configuration loaded from file {}'.format(settings.conf_file))
 
 
 def write_config(data):
@@ -79,11 +78,11 @@ def write_config(data):
     #         for parent in resource.parents:
     #             data_dict[group_name][resource_name]['dependencies'].append(parent.name)
 
-    if not os.path.isdir(ICS_CONF):
+    if not os.path.isdir(settings.conf_dir):
         try:
-            os.makedirs(ICS_CONF)
+            os.makedirs(settings.conf_dir)
         except OSError as e:
-            logger.error('Unable to create config directory: {}'.format(ICS_CONF))
+            logger.error('Unable to create config directory: {}'.format(settings.conf_dir))
             logger.error('Reason: {}'.format(e))
 
-    write_json(ICS_CONF_FILE, data)
+    write_json(settings.conf_file, data)

@@ -10,7 +10,7 @@ except ImportError:
 import Pyro4 as Pyro
 
 from ics import mail
-from ics.environment import HOSTNAME, ICS_CLUSTER_NAME
+from ics.settings import settings
 from ics.utils import alert_log_name
 from ics.utils import engine_conn
 from ics.utils import alert_conn
@@ -109,7 +109,7 @@ def create_test_alert(msg, level):
 class Alert:
     """Alert object."""
 
-    def __init__(self, resource, group, level, msg, node=HOSTNAME, time=None):
+    def __init__(self, resource, group, level, msg, node=settings.hostname, time=None):
         self.resource = resource
         self.group = group
         self.node = node
@@ -121,7 +121,7 @@ class Alert:
             self.time = time
 
     def __str__(self):
-        return ' '.join([self.time, get_level_name(self.level), ICS_CLUSTER_NAME, self.group, self.resource,
+        return ' '.join([self.time, get_level_name(self.level), settings.cluster_name, self.group, self.resource,
                          '\"' + self.msg + '\"'])
 
     def html(self, template):
@@ -134,7 +134,7 @@ class Alert:
             str: HTML to used to represent an alert.
 
         """
-        return template.format(message=self.msg, system_name=ICS_CLUSTER_NAME, host_name=HOSTNAME,
+        return template.format(message=self.msg, system_name=settings.cluster_name, host_name=settings.hostname,
                                group_name=self.group, resource_name=self.resource, event_time=self.time)
 
     def asdict(self):
@@ -299,7 +299,7 @@ class AlertHandler:
         else:
             for recipient in recipients:
                 logger.info('Sending alert to {}'.format(recipient))
-                sender = 'ics@' + HOSTNAME
+                sender = 'ics@' + settings.hostname
                 subject = 'ICS {} Alert - {}'.format('Warning', alert.resource)
                 body = alert.html(template)
                 try:

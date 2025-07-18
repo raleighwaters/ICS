@@ -7,21 +7,20 @@ import sys
 
 import Pyro4 as Pyro
 
-from environment import ICS_ENGINE_PORT
-from environment import ICS_LOG
+from ics.settings import settings
 from ics import utils
 from system import NodeSystem
 
-if not os.path.isdir(ICS_LOG):
+if not os.path.isdir(settings.log_dir):
     try:
-        os.makedirs(ICS_LOG)
+        os.makedirs(settings.log_dir)
     except OSError as e:
         print('ERROR: Unable to create log directory: {}'.format(e))
         print('Exiting...')
         sys.exit(1)
 
 # TODO: Check if file path exists
-logging.logFilename = ICS_LOG + '/icsserver.log'
+logging.logFilename = settings.log_dir + '/icsserver.log'
 if os.getenv('ICS_CONSOLE_LOG') is not None:
     log_config = os.path.dirname(__file__) + '/logging_console.conf'
 else:
@@ -66,13 +65,13 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 system.startup()
 
-logger.info("Starting Pyro on port " + str(ICS_ENGINE_PORT))
+logger.info("Starting Pyro on port " + str(settings.engine_port))
 
 Pyro.Daemon.serveSimple(
     {
         system: 'system'
     },
-    port=ICS_ENGINE_PORT,
+    port=settings.engine_port,
     host=socket.gethostname(),
     ns=False,
     verbose=False)
