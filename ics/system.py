@@ -1641,12 +1641,13 @@ class NodeSystem(AttributeObject):
                 AttributeObject.update_flag = False
                 self.config_update = False
                 logger.debug('Creating backup of config file')
+                auto_backup_file = settings.conf_file.with_name(settings.conf_file.name + '.autobackup')
                 if os.path.isfile(settings.conf_file):
-                    os.rename(settings.conf_file, settings.conf_file + '.autobackup')
+                    os.rename(settings.conf_file, auto_backup_file)
                 write_config(settings.conf_file, self.config_data())
 
-                backup_file = settings.conf_file + '.' + datetime.now().strftime('%y%m%d_%H%M%S')
-                logger.info('Creating backup config ' + backup_file)
+                backup_file = settings.conf_file.with_name(settings.conf_file.name + '.' + datetime.now().strftime('%y%m%d_%H%M%S'))
+                logger.info('Creating backup config ' + str(backup_file))
                 copyfile(settings.conf_file, backup_file)
 
             time.sleep(interval * 60)

@@ -199,12 +199,14 @@ def ics_version():
 
 def resource_log_name():
     """Resource log file name."""
-    return settings.res_log + '.' + datetime.now().strftime('%Y-%m-%d_%H')
+    return settings.res_log.with_name(settings.res_log.name + '.' + datetime.now().strftime('%Y-%m-%d_%H') )
+    #return str(settings.res_log) + '.' + datetime.now().strftime('%Y-%m-%d_%H')
 
 
 def alert_log_name():
     """Alert log file name."""
-    return settings.alert_log + '.' + datetime.now().strftime('%Y-%m-%d_%H')
+    return settings.alert_log.with_name(settings.alert_log.name + '.' + datetime.now().strftime('%Y-%m-%d_%H'))
+    #return str(settings.alert_log) + '.' + datetime.now().strftime('%Y-%m-%d_%H')
 
 
 def daemon_conn():
