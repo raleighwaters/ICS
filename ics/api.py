@@ -1,14 +1,60 @@
 from fastapi import FastAPI, HTTPException
-from ics.models import ResourceSpec, GroupSpec
+from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest
 
 
-def create_api(system):
+def create_api(system, raft_node):
 
     app = FastAPI(title="ICS API", version="3.0.0")
 
     @app.get("/ping")
     async def ping():
         return {"status": "ok"}
+
+    # -------- Raft --------
+
+    @app.get("/raft/status")
+    async def raft_status():
+        if not raft_node:
+            raise HTTPException(status_code=503, detail="Raft node unavailable")
+
+        with raft_node.lock:
+            return {
+                "node_id": raft_node.node_id,
+                "term": raft_node.current_term,
+                "role": raft_node.role.value,
+                "voted_for": raft_node.voted_for,
+                "log_length": len(raft_node.log),
+                "commit_index": raft_node.commit_index,
+                "last_applied": raft_node.last_applied
+            }
+
+    @app.post("/raft/request_vote")
+    async def request_vote(data: RequestVoteRequest):
+        if not raft_node:
+            raise HTTPException(status_code=503, detail="Raft node unavailable")
+
+        result = raft_node.handle_request_vote(
+            term=data.term,
+            candidate_id=data.candidate_id,
+            last_log_index=data.last_log_index,
+            last_log_term=data.last_log_term,
+        )
+        return result
+
+    @app.post("/raft/append_entries")
+    async def append_entries(data: AppendEntriesRequest):
+        if not raft_node:
+            raise HTTPException(status_code=503, detail="Raft node unavailable")
+
+        result = raft_node.handle_append_entries(
+            term=data.term,
+            leader_id=data.leader_id,
+            prev_log_index=data.prev_log_index,
+            prev_log_term=data.prev_log_term,
+            entries=data.entries,
+            leader_commit=data.leader_commit
+        )
+        return result
 
     # -------- Resources --------
 

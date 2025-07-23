@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Dict, Optional
 
 class ResourceSpec(BaseModel):
     name: str
@@ -32,4 +32,17 @@ class GroupSpec(BaseModel):
     parallel: bool = False
 
 
+class RequestVoteRequest(BaseModel):
+    term: int
+    candidate_id: str
+    last_log_index: int
+    last_log_term: int
 
+
+class AppendEntriesRequest(BaseModel):
+    term: int
+    leader_id: str
+    prev_log_index: int
+    prev_log_term: int
+    entries: List[Dict]
+    leader_commit: int

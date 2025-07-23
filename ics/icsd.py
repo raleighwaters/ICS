@@ -9,12 +9,13 @@ import Pyro4 as Pyro
 from ics.settings import settings
 from ics.api import create_api
 from ics.logging_config import setup_logging
+from ics.raft_node import RaftNode
 from ics.system import NodeSystem
 from ics.alerts import AlertHandler
+from ics.utils import hostname
 
-
-def start_api(system):
-    app = create_api(system)
+def start_api(system, raft_node):
+    app = create_api(system, raft_node)
     uvicorn.run(app, host="0.0.0.0", port=settings.api_port)
 
 
@@ -59,6 +60,11 @@ def main():
 
     system = NodeSystem()
 
+    node_id = hostname()
+    peers = [] # Expecting a list like ['host1:5000', 'host2:5000']
+    raft_node = RaftNode(node_id=node_id, peers=peers)
+    raft_node.start()
+
     # Start Pyro engine thread
     engine_thread = threading.Thread(target=start_system_server, args=(system,), daemon=True)
     engine_thread.start()
@@ -71,7 +77,7 @@ def main():
 
     # Run FastAPI in main thread
     logger.info("FastAPI server started on port 5000")
-    start_api(system)
+    start_api(system, raft_node)
 
 
 if __name__ == "__main__":
