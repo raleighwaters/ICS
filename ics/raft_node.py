@@ -40,6 +40,19 @@ class RaftNode:
         self.running = False
         self.thread: Optional[threading.Thread] = None
 
+    def get_status(self):
+        with self.lock:
+            return {
+                "node_id": self.node_id,
+                "role": self.role.value,
+                "term": self.current_term,
+                "log_length": len(self.log),
+                "commit_index": self.commit_index,
+                "last_applied": self.last_applied,
+                "next_index": self.next_index,
+                "match_index": self.match_index
+            }
+
     def _reset_election_timeout(self) -> float:
         timeout = random.uniform(5.0, 9.0)
         logger.debug(f"{self.node_id}: Reset election timeout to {timeout:.2f} seconds")

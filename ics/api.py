@@ -17,16 +17,8 @@ def create_api(system, raft_node):
         if not raft_node:
             raise HTTPException(status_code=503, detail="Raft node unavailable")
 
-        with raft_node.lock:
-            return {
-                "node_id": raft_node.node_id,
-                "term": raft_node.current_term,
-                "role": raft_node.role.value,
-                "voted_for": raft_node.voted_for,
-                "log_length": len(raft_node.log),
-                "commit_index": raft_node.commit_index,
-                "last_applied": raft_node.last_applied
-            }
+        return raft_node.get_status()
+
 
     @app.post("/raft/request_vote")
     async def request_vote(data: RequestVoteRequest):
