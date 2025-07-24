@@ -28,8 +28,8 @@ class RaftNode:
         self.last_applied = 0
 
         # Leader state
-        self.next_index: Dict[str, int] = {}
-        self.match_index: Dict[str, int] = {}
+        self.next_index: Dict[str, int] = {peer: 0 for peer in peers}
+        self.match_index: Dict[str, int] = {peer: -1 for peer in peers}
 
         # Election state
         self.role = RaftRole.FOLLOWER
@@ -69,14 +69,17 @@ class RaftNode:
     def _send_heartbeats(self):
         logger.debug(f"{self.node_id}: Sending heartbeats to peers")
         for peer in self.peers:
+            prev_index = self.next_index.get(peer, 0) - 1
+            prev_term = self.log[prev_index]['term'] if prev_index >= 0 and prev_index < len(self.log) else 0
+
             try:
                 response = requests.post(
                     f"http://{peer}/raft/append_entries",
                     json={
                         "term": self.current_term,
                         "leader_id": self.node_id,
-                        "prev_log_index": len(self.log) - 1,
-                        "prev_log_term": self.log[-1]['term'] if self.log else 0,
+                        "prev_log_index": prev_index,
+                        "prev_log_term": prev_term,
                         "entries": [],  # heartbeat has no log entries
                         "leader_commit": self.commit_index
                     },
@@ -211,35 +214,48 @@ class RaftNode:
 
     def _replicate_log_entry(self, index: int):
         entry = self.log[index]
-        prev_index = index - 1
-        prev_term = self.log[prev_index]['term'] if prev_index >= 0 else 0
         success_count = 1  # count self
 
         for peer in self.peers:
-            try:
-                response = requests.post(
-                    f"http://{peer}/raft/append_entries",
-                    json={
-                        "term": self.current_term,
-                        "leader_id": self.node_id,
-                        "prev_log_index": prev_index,
-                        "prev_log_term": prev_term,
-                        "entries": [entry],
-                        "leader_commit": self.commit_index
-                    },
-                    timeout=2.0
-                )
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get("success"):
-                        success_count += 1
-                        logger.info(f"{self.node_id}: Log entry replicated to {peer}")
+            next_idx = self.next_index.get(peer, len(self.log))
+
+            while next_idx <= index:
+                prev_index = next_idx - 1
+                prev_term = self.log[prev_index]['term'] if prev_index >= 0 else 0
+                entries = self.log[next_idx:index + 1]
+
+                try:
+                    response = requests.post(
+                        f"http://{peer}/raft/append_entries",
+                        json={
+                            "term": self.current_term,
+                            "leader_id": self.node_id,
+                            "prev_log_index": prev_index,
+                            "prev_log_term": prev_term,
+                            "entries": entries,
+                            "leader_commit": self.commit_index
+                        },
+                        timeout=2.0
+                    )
+
+                    if response.status_code == 200:
+                        result = response.json()
+                        if result.get("success"):
+                            self.match_index[peer] = index
+                            self.next_index[peer] = index + 1
+                            success_count += 1
+                            logger.info(f"{self.node_id}: Log entry replicated to {peer}")
+                            break
+                        else:
+                            self.next_index[peer] = max(0, self.next_index[peer] - 1)
+                            logger.info(
+                                f"{self.node_id}: AppendEntries to {peer} failed, decrementing next_index to {self.next_index[peer]}")
                     else:
-                        logger.info(f"{self.node_id}: AppendEntries to {peer} rejected: term mismatch")
-                else:
-                    logger.warning(f"{self.node_id}: AppendEntries to {peer} failed with {response.status_code}")
-            except Exception as e:
-                logger.warning(f"{self.node_id}: Failed to replicate to {peer}: {e}")
+                        logger.warning(f"{self.node_id}: AppendEntries to {peer} failed with {response.status_code}")
+                        break
+                except Exception as e:
+                    logger.warning(f"{self.node_id}: Failed to replicate to {peer}: {e}")
+                    break
 
         with self.lock:
             if success_count > (len(self.peers) + 1) // 2:
