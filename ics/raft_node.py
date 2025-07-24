@@ -196,6 +196,56 @@ class RaftNode:
                 "success": success
             }
 
+    def append_entry(self, command: dict):
+        with self.lock:
+            if self.role != RaftRole.LEADER:
+                raise RuntimeError("Only the leader can append entries")
+
+            entry = {"term": self.current_term, "command": command}
+            self.log.append(entry)
+            index = len(self.log) - 1
+            logger.info(f"{self.node_id}: Appended new entry at index {index}: {entry}")
+
+        # Start replication in a background thread
+        threading.Thread(target=self._replicate_log_entry, args=(index,), daemon=True).start()
+
+    def _replicate_log_entry(self, index: int):
+        entry = self.log[index]
+        prev_index = index - 1
+        prev_term = self.log[prev_index]['term'] if prev_index >= 0 else 0
+        success_count = 1  # count self
+
+        for peer in self.peers:
+            try:
+                response = requests.post(
+                    f"http://{peer}/raft/append_entries",
+                    json={
+                        "term": self.current_term,
+                        "leader_id": self.node_id,
+                        "prev_log_index": prev_index,
+                        "prev_log_term": prev_term,
+                        "entries": [entry],
+                        "leader_commit": self.commit_index
+                    },
+                    timeout=2.0
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("success"):
+                        success_count += 1
+                        logger.info(f"{self.node_id}: Log entry replicated to {peer}")
+                    else:
+                        logger.info(f"{self.node_id}: AppendEntries to {peer} rejected: term mismatch")
+                else:
+                    logger.warning(f"{self.node_id}: AppendEntries to {peer} failed with {response.status_code}")
+            except Exception as e:
+                logger.warning(f"{self.node_id}: Failed to replicate to {peer}: {e}")
+
+        with self.lock:
+            if success_count > (len(self.peers) + 1) // 2:
+                self.commit_index = index
+                logger.info(f"{self.node_id}: Entry at index {index} committed")
+
     def stop(self):
         with self.lock:
             self.running = False
