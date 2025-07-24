@@ -41,7 +41,9 @@ class RaftNode:
         self.thread: Optional[threading.Thread] = None
 
     def _reset_election_timeout(self) -> float:
-        return time.time() + random.uniform(5.0, 9.0)
+        timeout = random.uniform(5.0, 9.0)
+        logger.debug(f"{self.node_id}: Reset election timeout to {timeout:.2f} seconds")
+        return time.time() + timeout
 
     def _run(self):
         while self.running:
@@ -50,8 +52,10 @@ class RaftNode:
                 now = time.time()
 
                 if self.role == RaftRole.LEADER:
+                    logger.debug(f"{self.node_id}: Running as leader in term {self.current_term}")
                     self._send_heartbeats()
                 elif now >= self.election_timeout:
+                    logger.info(f"{self.node_id}: Election timeout reached, starting election")
                     self._start_election()
 
     def start(self):
@@ -60,6 +64,7 @@ class RaftNode:
                 self.running = True
                 self.thread = threading.Thread(target=self._run, name=f"raft-{self.node_id}", daemon=True)
                 self.thread.start()
+                logger.info(f"{self.node_id}: Raft node started")
 
     def _send_heartbeats(self):
         logger.debug(f"{self.node_id}: Sending heartbeats to peers")
@@ -105,7 +110,10 @@ class RaftNode:
                 if response.status_code == 200:
                     result = response.json()
                     if result.get("vote_granted"):
+                        logger.info(f"{self.node_id}: Received vote from {peer}")
                         votes_received += 1
+                    else:
+                        logger.info(f"{self.node_id}: Vote from {peer} denied")
             except Exception as e:
                 logger.warning(f"{self.node_id}: Failed to request vote from {peer}: {e}")
 
@@ -129,6 +137,7 @@ class RaftNode:
         with self.lock:
             vote_granted = False
             if term > self.current_term:
+                logger.info(f"{self.node_id}: Newer term {term} detected from {candidate_id}, stepping down")
                 self.current_term = term
                 self.voted_for = None
                 self.role = RaftRole.FOLLOWER
@@ -141,6 +150,9 @@ class RaftNode:
                 ):
                     self.voted_for = candidate_id
                     vote_granted = True
+                    logger.info(f"{self.node_id}: Voted for {candidate_id} in term {term}")
+                else:
+                    logger.info(f"{self.node_id}: Did not vote for {candidate_id} due to log inconsistency")
 
             return {
                 "term": self.current_term,
@@ -152,16 +164,16 @@ class RaftNode:
         with self.lock:
             success = False
             if term >= self.current_term:
+                if self.current_term != term:
+                    logger.info(f"{self.node_id}: Updating to new term {term} from leader {leader_id}")
                 self.current_term = term
                 self.role = RaftRole.FOLLOWER
                 self.voted_for = None
                 self.election_timeout = self._reset_election_timeout()
 
-                # Check log consistency
                 if prev_log_index == -1 or (
                     prev_log_index < len(self.log) and self.log[prev_log_index]['term'] == prev_log_term
                 ):
-                    # Append any new entries (simplified: we assume no conflicts)
                     for i, entry in enumerate(entries):
                         log_index = prev_log_index + 1 + i
                         if log_index >= len(self.log):
@@ -173,6 +185,11 @@ class RaftNode:
                     if leader_commit > self.commit_index:
                         self.commit_index = min(leader_commit, len(self.log) - 1)
                     success = True
+                    logger.debug(f"{self.node_id}: AppendEntries successful from leader {leader_id}")
+                else:
+                    logger.debug(f"{self.node_id}: AppendEntries log mismatch from leader {leader_id}")
+            else:
+                logger.debug(f"{self.node_id}: Rejected AppendEntries from {leader_id} due to stale term")
 
             return {
                 "term": self.current_term,
