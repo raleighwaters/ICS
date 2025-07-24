@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest
 
 
@@ -55,6 +55,15 @@ def create_api(system, raft_node):
             leader_commit=data.leader_commit
         )
         return result
+
+    @app.post("/raft/append_log")
+    async def append_log(request: Request):
+        data = await request.json()
+        try:
+            raft_node.append_entry(data)
+            return {"status": "entry appended"}
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     # -------- Resources --------
 
