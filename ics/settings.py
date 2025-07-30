@@ -35,6 +35,9 @@ class ICSSettings(BaseSettings):
     alert_recipients: Optional[List[str]] = None
     alert_level: str = Field("NOTSET")
 
+    group_limit: int = Field(200)
+    resource_limit: int = Field(5000)
+
     # Derived fields
     cluster_name: Optional[str] = None
     conf_file: Optional[Path] = None

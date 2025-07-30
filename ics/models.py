@@ -1,5 +1,10 @@
 from pydantic import BaseModel
 from typing import List, Dict, Optional
+from enum import Enum
+
+class ResourceState(str, Enum):
+    ONLINE = "online"
+    OFFLINE = "offline"
 
 class ResourceSpec(BaseModel):
     name: str
@@ -22,6 +27,7 @@ class ResourceSpec(BaseModel):
 
     dependsOn: Optional[List[str]] = []
 
+    desired_state: ResourceState = ResourceState.OFFLINE
 
 class GroupSpec(BaseModel):
     name: str
