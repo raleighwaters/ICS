@@ -289,8 +289,8 @@ class RaftNode:
         while self.running:
             time.sleep(0.1)
             with self.lock:
-                while self.last_applied < self.commit_index:
-                    self.last_applied += 1
+                if self.last_applied < self.commit_index:
+                    self.last_applied = self.commit_index
                     entry = self.log[self.last_applied]
                     self._apply_entry(entry)
 
