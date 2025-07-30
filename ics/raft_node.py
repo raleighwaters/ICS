@@ -24,8 +24,8 @@ class RaftNode:
         self.log: List[dict] = []  # Will hold commands
 
         # Volatile state
-        self.commit_index = 0
-        self.last_applied = 0
+        self.commit_index = -1
+        self.last_applied = -1
 
         # Leader state
         self.next_index: Dict[str, int] = {peer: 0 for peer in peers}
