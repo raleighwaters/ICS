@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-export ICS_HOME=${ICS_HOME:-/opt/ICS}
-source ${ICS_HOME}/test/test_setup.sh
+#export ICS_HOME=${ICS_HOME:-/opt/ICS}
+#source ${ICS_HOME}/test/test_setup.sh
+
+RES_FILES=./tmp_data/res
 
 cmd=${1}
 resource=${2}
@@ -31,7 +33,8 @@ get_resource_state()
 }
 
 # Get a random number for sleep time to simulate more real-world conditions
-sleep_time=$(shuf -i 1-10 -n 1)
+#sleep_time=$(shuf -i 1-10 -n 1)
+sleep_time=0.5
 
 case ${cmd} in
     "start") echo "${time} starting resource ${resource}";

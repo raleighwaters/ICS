@@ -40,6 +40,8 @@ class RaftNode:
         self.running = False
         self.thread: Optional[threading.Thread] = None
 
+        self.applier_thread: Optional[threading.Thread] = None
+
     def get_status(self):
         with self.lock:
             return {
@@ -77,6 +79,14 @@ class RaftNode:
                 self.running = True
                 self.thread = threading.Thread(target=self._run, name=f"raft-{self.node_id}", daemon=True)
                 self.thread.start()
+
+                self.applier_thread = threading.Thread(
+                    target=self._apply_committed_entries,
+                    name=f"raft-applier-{self.node_id}",
+                    daemon=True
+                )
+                self.applier_thread.start()
+
                 logger.info(f"{self.node_id}: Raft node started")
 
     def _send_heartbeats(self):
@@ -275,8 +285,36 @@ class RaftNode:
                 self.commit_index = index
                 logger.info(f"{self.node_id}: Entry at index {index} committed")
 
+    def _apply_committed_entries(self):
+        while self.running:
+            time.sleep(0.1)
+            with self.lock:
+                while self.last_applied < self.commit_index:
+                    self.last_applied += 1
+                    entry = self.log[self.last_applied]
+                    self._apply_entry(entry)
+
+    def _apply_entry(self, entry: dict):
+        cmd = entry["command"]
+        cmd_type = cmd.get("type")
+        cmd_data = cmd.get("data")
+
+        logger.info(f"{self.node_id}: Applying log entry at index {self.last_applied}: {cmd_type}")
+
+        if cmd_type == "CONFIG_UPDATE":
+            # Call system method to update resource config
+            # For example: self.system.update_config(cmd_data)
+            pass
+
+        elif cmd_type == "SET_STATE":
+            # Call system method to set desired state
+            # For example: self.system.set_resource_state(cmd_data["resource"], cmd_data["state"])
+            pass
+
     def stop(self):
         with self.lock:
             self.running = False
         if self.thread:
             self.thread.join()
+        if self.applier_thread:
+            self.applier_thread.join()
