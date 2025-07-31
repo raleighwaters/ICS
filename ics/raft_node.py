@@ -319,9 +319,18 @@ class RaftNode:
             time.sleep(0.1)
             with self.lock:
                 if self.last_applied < self.commit_index:
-                    self.last_applied = self.commit_index
-                    entry = self.log[self.last_applied]
+                    latest_index = self.commit_index
+
+                    # Sanity check to avoid index error
+                    if latest_index >= len(self.log):
+                        logger.warning(
+                            f"{self.node_id}: Commit index {latest_index} exceeds log length {len(self.log)} — skipping apply"
+                        )
+                        continue
+
+                    entry = self.log[latest_index]
                     self._apply_entry(entry)
+                    self.last_applied = latest_index
 
     def _apply_entry(self, entry: dict):
         cmd = entry["command"]
