@@ -6,7 +6,11 @@ import logging
 import requests
 from typing import List, Dict, Optional
 
+from ics.system import NodeSystem
+from ics.cluster_config import ClusterConfig
+
 logger = logging.getLogger(__name__)
+
 
 class RaftRole(enum.Enum):
     FOLLOWER = 'Follower'
@@ -14,9 +18,11 @@ class RaftRole(enum.Enum):
     LEADER = 'Leader'
 
 class RaftNode:
-    def __init__(self, node_id: str, peers: List[str]):
+    def __init__(self, node_id: str, peers: List[str], system: Optional[NodeSystem] = None):
         self.node_id = node_id
         self.peers = peers  # List of other node IDs (IP:port)
+
+        self.system = system
 
         # Raft persistent state
         self.current_term = 0
