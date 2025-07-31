@@ -186,6 +186,10 @@ class RaftNode:
                 else:
                     logger.info(f"{self.node_id}: Did not vote for {candidate_id} due to log inconsistency")
 
+            # Reset election timer if vote granted to reduce unnecessary elections
+            if vote_granted:
+                self.election_timeout = self._reset_election_timeout()
+
             return {
                 "term": self.current_term,
                 "vote_granted": vote_granted
