@@ -168,6 +168,17 @@ class RaftNode:
     def handle_request_vote(self, term: int, candidate_id: str, last_log_index: int, last_log_term: int) -> dict:
         with self.lock:
             vote_granted = False
+
+            # Reject vote if given term is stale
+            if term < self.current_term:
+                logger.debug(
+                    f"{self.node_id}: Rejected vote request from {candidate_id} (stale term {term} < current {self.current_term})")
+                return {
+                    "term": self.current_term,
+                    "vote_granted": False
+                }
+
+            # Step down if term is newer
             if term > self.current_term:
                 logger.info(f"{self.node_id}: Newer term {term} detected from {candidate_id}, stepping down")
                 self.current_term = term
