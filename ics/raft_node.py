@@ -311,6 +311,24 @@ class RaftNode:
             # For example: self.system.set_resource_state(cmd_data["resource"], cmd_data["state"])
             pass
 
+    def get_latest_config(self) -> ClusterConfig:
+        with self.lock:
+            for entry in reversed(self.log):
+                if entry.get("command", {}).get("type") == "CONFIG_UPDATE":
+                    return ClusterConfig(**entry["command"]["data"])
+        logger.warning("No CONFIG_UPDATE found in log, returning empty config")
+        return ClusterConfig()
+
+    def propose_new_config(self, config: ClusterConfig):
+        logger.info("Proposing new config change")
+        if self.role != RaftRole.LEADER:
+            raise RuntimeError("Only the leader can propose new configs")
+        entry = {
+            "type": "CONFIG_UPDATE",
+            "data": config.model_dump()
+        }
+        self.append_entry(entry)
+
     def stop(self):
         with self.lock:
             self.running = False

@@ -1,10 +1,17 @@
 from fastapi import FastAPI, HTTPException, Request
+
 from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest
+from ics.cluster_config import ClusterConfig
 
 
-def create_api(system, raft_node):
+def create_api(raft_node):
 
     app = FastAPI(title="ICS API", version="3.0.0")
+
+    def mutate_config(mutator):
+        config = raft_node.get_latest_config()
+        mutator(config)
+        raft_node.propose_new_config(config)
 
     @app.get("/ping")
     async def ping():
@@ -19,6 +26,9 @@ def create_api(system, raft_node):
 
         return raft_node.get_status()
 
+    @app.get("/raft/config")
+    async def raft_config():
+        return raft_node.get_latest_config()
 
     @app.post("/raft/request_vote")
     async def request_vote(data: RequestVoteRequest):
@@ -61,103 +71,70 @@ def create_api(system, raft_node):
 
     @app.get("/resources")
     async def list_resources():
-        return {"resources": system.res_list()}
+        config = raft_node.get_latest_config()
+        return {"resources": list(config.resources.keys())}
 
     @app.post("/resources")
-    async def add_resources(resource: ResourceSpec):
-        if resource.name in system.res_list():
-            raise HTTPException(status_code=400, detail="Resource already exists")
-
-        system.res_add(resource.name, resource.group)
-
-        attr_map = {
-            "Enabled": str(resource.enabled).lower(),
-            "StartProgram": resource.startProgram or "",
-            "StopProgram": resource.stopProgram or "",
-            "MonitorProgram": resource.monitorProgram or "",
-            "FaultPropagation": str(resource.faultPropagation).lower(),
-            "OnlineRetryLimit": str(resource.onlineRetryLimit),
-            "RestartLimit": str(resource.restartLimit),
-            "MonitorOnly": str(resource.monitorOnly).lower(),
-            "MonitorInterval": str(resource.monitorInterval),
-            "OfflineMonitorInterval": str(resource.offlineMonitorInterval),
-            "OnlineTimeout": str(resource.onlineTimeout),
-            "OfflineTimeout": str(resource.offlineTimeout),
-            "MonitorTimeout": str(resource.monitorTimeout),
-            "Load": str(resource.load),
-        }
-
-        for key, value in attr_map.items():
-            system.res_modify(resource.name, key, value)
-
-        # Add dependency links
-        if resource.dependsOn:
-            for parent in resource.dependsOn:
-                if parent not in system.res_list():
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Dependency '{parent}' not found for resource '{resource.name}'"
-                    )
-                system.res_link(resource.name, parent)
-
+    async def add_resource(resource: ResourceSpec):
+        def mutator(config: ClusterConfig):
+            config.add_resource(resource)
+        mutate_config(mutator)
         return {"status": "added", "name": resource.name}
-
-    @app.get("/resources/{name}")
-    async def get_resource(name: str):
-        if name not in system.res_list():
-            raise HTTPException(status_code=404, detail="Resource not found")
-
-        resource = system.get_resource(name)
-        return resource.to_spec()
 
     @app.delete("/resources/{name}")
     async def delete_resource(name: str):
-        if name not in system.res_list():
-            raise HTTPException(status_code=404, detail="Resource not found")
-
-        system.res_delete(name)
+        def mutator(config: ClusterConfig):
+            config.delete_resource(name)
+        mutate_config(mutator)
         return {"status": "deleted", "name": name}
+
+    @app.post("/resources/{name}/online")
+    async def res_online(name: str):
+        def mutator(config: ClusterConfig):
+            config.res_online(name)
+        mutate_config(mutator)
+        return {"status": "resource set to online"}
+
+    @app.post("/resources/{name}/offline")
+    async def res_offline(name: str):
+        def mutator(config: ClusterConfig):
+            config.res_offline(name)
+        mutate_config(mutator)
+        return {"status": "resource set to offline"}
 
     # -------- Groups --------
 
     @app.get("/groups")
     async def list_groups():
-        return {"groups": system.grp_list()}
+        config = raft_node.get_latest_config()
+        return {"groups": list(config.groups.keys())}
 
     @app.post("/groups")
     async def add_group(group: GroupSpec):
-        if group.name in system.grp_list():
-            raise HTTPException(status_code=400, detail="Group already exists")
-
-        system.grp_add(group.name)
-
-        attr_map = {
-            "Enabled": str(group.enabled).lower(),
-            "AutoStart": str(group.autoStart).lower(),
-            "IgnoreDisabled": str(group.ignoreDisabled).lower(),
-            "Parallel": str(group.parallel).lower(),
-            "SystemList": group.systemList,
-        }
-
-        for key, value in attr_map.items():
-            system.grp_modify(group.name, key, value)
-
+        def mutator(config: ClusterConfig):
+            config.add_group(group)
+        mutate_config(mutator)
         return {"status": "added", "name": group.name}
-
-    @app.get("/groups/{name}")
-    async def get_group(name: str):
-        if name not in system.grp_list():
-            raise HTTPException(status_code=404, detail="Group not found")
-
-        group = system.get_group(name)
-        return group.to_spec()
 
     @app.delete("/groups/{name}")
     async def delete_group(name: str):
-        if name not in system.grp_list():
-            raise HTTPException(status_code=404, detail="Group not found")
-
-        system.grp_delete(name)
+        def mutator(config: ClusterConfig):
+            config.delete_group(name)
+        mutate_config(mutator)
         return {"status": "deleted", "name": name}
+
+    @app.post("/groups/{name}/online")
+    async def grp_online(name: str):
+        def mutator(config: ClusterConfig):
+            config.grp_online(name)
+        mutate_config(mutator)
+        return {"status": "group set to online"}
+
+    @app.post("/groups/{name}/offline")
+    async def grp_offline(name: str):
+        def mutator(config: ClusterConfig):
+            config.grp_offline(name)
+        mutate_config(mutator)
+        return {"status": "group set to offline"}
 
     return app
