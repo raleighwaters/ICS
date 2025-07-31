@@ -245,6 +245,14 @@ class RaftNode:
         entry = self.log[index]
         success_count = 1  # count self
 
+        #TODO: This may need to be made configurable as a setting
+        if len(self.peers) == 0:
+            # Single-node cluster — commit immediately
+            with self.lock:
+                self.commit_index = index
+                logger.info(f"{self.node_id}: Single-node cluster, committed entry at index {index}")
+            return
+
         for peer in self.peers:
             next_idx = self.next_index.get(peer, len(self.log))
 
