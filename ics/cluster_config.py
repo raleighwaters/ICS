@@ -84,3 +84,23 @@ class ClusterConfig(BaseModel):
             if res_config.group == group_name:
                 res_config.desired_state = ResourceState.OFFLINE
                 logger.info(f"Resource '{res_config.name}' in group '{group_name}' set to OFFLINE")
+
+    def link_dependency(self, resource_name: str, dependency_name: str):
+        self._ensure_resource_exists(resource_name)
+        self._ensure_resource_exists(dependency_name)
+
+        if dependency_name in self.resources[resource_name].dependsOn:
+            raise ValueError(f"Resource '{resource_name}' already depends on '{dependency_name}'")
+
+        self.resources[resource_name].dependsOn.append(dependency_name)
+        logger.info(f"Added dependency: '{resource_name}' depends on '{dependency_name}'")
+
+    def unlink_dependency(self, resource_name: str, dependency_name: str):
+        self._ensure_resource_exists(resource_name)
+        self._ensure_resource_exists(dependency_name)
+
+        if dependency_name not in self.resources[resource_name].dependsOn:
+            raise ValueError(f"Resource '{resource_name}' does not depend on '{dependency_name}'")
+
+        self.resources[resource_name].dependsOn.remove(dependency_name)
+        logger.info(f"Removed dependency: '{resource_name}' no longer depends on '{dependency_name}'")
