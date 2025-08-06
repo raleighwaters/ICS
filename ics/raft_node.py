@@ -107,8 +107,10 @@ class RaftNode:
     def _become_leader(self):
         self.role = RaftRole.LEADER
         logger.info(f"{self.node_id}: Became leader for term {self.current_term}")
+
+        # Reset the peer next_index values to the index just after the last one in its log
         for peer in self.peers:
-            self.peer_next_index[peer] = len(self.log)
+            self.peer_next_index[peer] = len(self.log) # Set peer next index to resend last log
             self.peer_match_index[peer] = 0
         self._send_heartbeats()
 
@@ -157,7 +159,13 @@ class RaftNode:
         logger.debug(f"{self.node_id}: Sending heartbeats or log entries to peers")
 
         for peer in self.peers:
-            next_index = self.peer_next_index.get(peer, len(self.log))
+
+            # If peer is missing from known index list, assume the peer is not up-to-date
+            if peer not in self.peer_next_index:
+                logger.warning(f"{self.node_id}: No known next index for peer {peer}, assuming zero")
+                self.peer_next_index[peer] = 0
+
+            next_index = self.peer_next_index.get(peer)
             prev_index = next_index - 1
             prev_term = self.log[prev_index]['term'] if prev_index >= 0 else 0
 
