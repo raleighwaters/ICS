@@ -157,16 +157,16 @@ class RaftNode:
         logger.debug(f"{self.node_id}: Sending heartbeats or log entries to peers")
 
         for peer in self.peers:
-            next_idx = self.peer_next_index.get(peer, len(self.log))
-            prev_index = next_idx - 1
+            next_index = self.peer_next_index.get(peer, len(self.log))
+            prev_index = next_index - 1
             prev_term = self.log[prev_index]['term'] if prev_index >= 0 else 0
 
             # If follower is up to date, send heartbeat
-            if next_idx >= len(self.log):
+            if next_index >= len(self.log):
                 entries = []
             else:
                 # Follower is behind — send real entries
-                entries = self.log[next_idx:]
+                entries = self.log[next_index:]
 
             try:
                 response = requests.post(
@@ -185,7 +185,7 @@ class RaftNode:
                     result = response.json()
                     if result.get("success"):
                         if entries:
-                            self.peer_match_index[peer] = next_idx + len(entries) - 1
+                            self.peer_match_index[peer] = next_index + len(entries) - 1
                             self.peer_next_index[peer] = self.peer_match_index[peer] + 1
                             logger.info(f"{self.node_id}: Updated match_index for {peer} to {self.peer_match_index[peer]}")
                     else:
