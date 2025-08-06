@@ -31,12 +31,12 @@ class RaftNode:
         self.log: List[dict] = []
 
         # Volatile state
-        self.commit_index = -1
-        self.last_applied = -1
+        self.commit_index = -1  # Index of the highest log entry known to be committed
+        self.last_applied = -1  # Last applied log index
 
         # Leader state
-        self.next_index: Dict[str, int] = {peer: 0 for peer in peers}
-        self.match_index: Dict[str, int] = {peer: -1 for peer in peers}
+        self.peer_next_index: Dict[str, int] = {peer: 0 for peer in peers} # Next log entry to send to peer
+        self.peer_match_index: Dict[str, int] = {peer: -1 for peer in peers}  # Highest index known to be replicated on the peer
 
         # Election state
         self.role = RaftRole.FOLLOWER
@@ -58,8 +58,8 @@ class RaftNode:
                 "log_length": len(self.log),
                 "commit_index": self.commit_index,
                 "last_applied": self.last_applied,
-                "next_index": self.next_index,
-                "match_index": self.match_index
+                "next_index": self.peer_next_index,
+                "match_index": self.peer_match_index
             }
 
     def _reset_election_timeout(self) -> float:
@@ -108,8 +108,8 @@ class RaftNode:
         self.role = RaftRole.LEADER
         logger.info(f"{self.node_id}: Became leader for term {self.current_term}")
         for peer in self.peers:
-            self.next_index[peer] = len(self.log)
-            self.match_index[peer] = 0
+            self.peer_next_index[peer] = len(self.log)
+            self.peer_match_index[peer] = 0
         self._send_heartbeats()
 
     def handle_request_vote(self, term: int, candidate_id: str, last_log_index: int, last_log_term: int) -> dict:
@@ -157,7 +157,7 @@ class RaftNode:
         logger.debug(f"{self.node_id}: Sending heartbeats or log entries to peers")
 
         for peer in self.peers:
-            next_idx = self.next_index.get(peer, len(self.log))
+            next_idx = self.peer_next_index.get(peer, len(self.log))
             prev_index = next_idx - 1
             prev_term = self.log[prev_index]['term'] if prev_index >= 0 else 0
 
@@ -185,78 +185,19 @@ class RaftNode:
                     result = response.json()
                     if result.get("success"):
                         if entries:
-                            self.match_index[peer] = next_idx + len(entries) - 1
-                            self.next_index[peer] = self.match_index[peer] + 1
-                            logger.info(f"{self.node_id}: Updated match_index for {peer} to {self.match_index[peer]}")
+                            self.peer_match_index[peer] = next_idx + len(entries) - 1
+                            self.peer_next_index[peer] = self.peer_match_index[peer] + 1
+                            logger.info(f"{self.node_id}: Updated match_index for {peer} to {self.peer_match_index[peer]}")
                     else:
-                        self.next_index[peer] = max(0, self.next_index[peer] - 1)
+                        self.peer_next_index[peer] = max(0, self.peer_next_index[peer] - 1)
                         logger.warning(
-                            f"{self.node_id}: AppendEntries failed for {peer}, backtracking next_index to {self.next_index[peer]}")
+                            f"{self.node_id}: AppendEntries failed for {peer}, backtracking next_index to {self.peer_next_index[peer]}")
                 else:
                     logger.warning(f"{self.node_id}: AppendEntries to {peer} failed with status {response.status_code}")
             except Exception as e:
                 logger.warning(f"{self.node_id}: Failed to contact {peer}: {e}")
 
         self.election_timeout = self._reset_election_timeout()
-
-    def _replicate_log_entry(self, index: int):
-        entry = self.log[index]
-        success_count = 1  # count self
-
-        # #TODO: This may need to be made configurable as a setting
-        # if len(self.peers) == 0:
-        #     # Single-node cluster — commit immediately
-        #     with self.lock:
-        #         self.commit_index = index
-        #         logger.info(f"{self.node_id}: Single-node cluster, committed entry at index {index}")
-        #     return
-
-        for peer in self.peers:
-            next_idx = self.next_index.get(peer, len(self.log))
-
-            while next_idx <= index:
-                prev_index = next_idx - 1
-                prev_term = self.log[prev_index]['term'] if prev_index >= 0 else 0
-                entries = self.log[next_idx:index + 1]
-
-                try:
-                    response = requests.post(
-                        f"http://{peer}/raft/append_entries",
-                        json={
-                            "term": self.current_term,
-                            "leader_id": self.node_id,
-                            "prev_log_index": prev_index,
-                            "prev_log_term": prev_term,
-                            "entries": entries,
-                            "leader_commit": self.commit_index
-                        },
-                        timeout=2.0
-                    )
-
-                    if response.status_code == 200:
-                        result = response.json()
-                        if result.get("success"):
-                            self.match_index[peer] = index
-                            self.next_index[peer] = index + 1
-                            success_count += 1
-                            logger.info(f"{self.node_id}: Log entry replicated to {peer}")
-                            break
-                        else:
-                            self.next_index[peer] = max(0, self.next_index[peer] - 1)
-                            next_idx = self.next_index[peer]
-                            logger.info(
-                                f"{self.node_id}: AppendEntries to {peer} failed, decrementing next_index to {self.next_index[peer]}")
-                    else:
-                        logger.warning(f"{self.node_id}: AppendEntries to {peer} failed with {response.status_code}")
-                        break
-                except Exception as e:
-                    logger.warning(f"{self.node_id}: Failed to replicate to {peer}: {e}")
-                    break
-
-        with self.lock:
-            if success_count > (len(self.peers) + 1) // 2:
-                self.commit_index = index
-                logger.info(f"{self.node_id}: Entry at index {index} committed")
 
     def handle_append_entries(self, term: int, leader_id: str, prev_log_index: int, prev_log_term: int,
                               entries: List[dict], leader_commit: int) -> dict:
@@ -308,9 +249,6 @@ class RaftNode:
             self.log.append(entry)
             index = len(self.log) - 1
             logger.info(f"{self.node_id}: Appended new entry at index {index}: {entry}")
-
-        # Start replication in a background thread
-        threading.Thread(target=self._replicate_log_entry, args=(index,), daemon=True).start()
 
     def get_latest_config(self) -> ClusterConfig:
         with self.lock:
