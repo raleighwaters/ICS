@@ -6,16 +6,17 @@ import logging
 import requests
 from typing import List, Dict, Optional
 
+logger = logging.getLogger(__name__)
+
 from ics.system import NodeSystem
 from ics.cluster_config import ClusterConfig
-
-logger = logging.getLogger(__name__)
 
 
 class RaftRole(enum.Enum):
     FOLLOWER = 'Follower'
     CANDIDATE = 'Candidate'
     LEADER = 'Leader'
+
 
 class RaftNode:
     def __init__(self, node_id: str, peers: List[str], system: Optional[NodeSystem] = None):
@@ -27,7 +28,7 @@ class RaftNode:
         # Raft persistent state
         self.current_term = 0
         self.voted_for: Optional[str] = None
-        self.log: List[dict] = []  # Will hold commands
+        self.log: List[dict] = []
 
         # Volatile state
         self.commit_index = -1
@@ -65,60 +66,6 @@ class RaftNode:
         timeout = random.uniform(5.0, 9.0)
         logger.debug(f"{self.node_id}: Reset election timeout to {timeout:.2f} seconds")
         return time.time() + timeout
-
-    def _run(self):
-        while self.running:
-            time.sleep(0.1)
-            with self.lock:
-                now = time.time()
-
-                if self.role == RaftRole.LEADER:
-                    logger.debug(f"{self.node_id}: Running as leader in term {self.current_term}")
-                    self._send_heartbeats()
-                elif now >= self.election_timeout:
-                    logger.info(f"{self.node_id}: Election timeout reached, starting election")
-                    self._start_election()
-
-    def start(self):
-        with self.lock:
-            if not self.running:
-                self.running = True
-                self.thread = threading.Thread(target=self._run, name=f"raft-{self.node_id}", daemon=True)
-                self.thread.start()
-
-                self.applier_thread = threading.Thread(
-                    target=self._apply_committed_entries,
-                    name=f"raft-applier-{self.node_id}",
-                    daemon=True
-                )
-                self.applier_thread.start()
-
-                logger.info(f"{self.node_id}: Raft node started")
-
-    def _send_heartbeats(self):
-        logger.debug(f"{self.node_id}: Sending heartbeats to peers")
-        for peer in self.peers:
-            prev_index = self.next_index.get(peer, 0) - 1
-            prev_term = self.log[prev_index]['term'] if prev_index >= 0 and prev_index < len(self.log) else 0
-
-            try:
-                response = requests.post(
-                    f"http://{peer}/raft/append_entries",
-                    json={
-                        "term": self.current_term,
-                        "leader_id": self.node_id,
-                        "prev_log_index": prev_index,
-                        "prev_log_term": prev_term,
-                        "entries": [],  # heartbeat has no log entries
-                        "leader_commit": self.commit_index
-                    },
-                    timeout=1.0
-                )
-                if response.status_code != 200:
-                    logger.warning(f"{self.node_id}: Heartbeat to {peer} failed with {response.status_code}")
-            except Exception as e:
-                logger.warning(f"{self.node_id}: Heartbeat to {peer} failed: {e}")
-        self.election_timeout = self._reset_election_timeout()
 
     def _start_election(self):
         self.role = RaftRole.CANDIDATE
@@ -206,67 +153,63 @@ class RaftNode:
                 "vote_granted": vote_granted
             }
 
-    def handle_append_entries(self, term: int, leader_id: str, prev_log_index: int, prev_log_term: int,
-                              entries: List[dict], leader_commit: int) -> dict:
-        with self.lock:
-            success = False
-            if term >= self.current_term:
-                if self.current_term != term:
-                    logger.info(f"{self.node_id}: Updating to new term {term} from leader {leader_id}")
-                self.current_term = term
-                self.role = RaftRole.FOLLOWER
-                self.voted_for = None
-                self.election_timeout = self._reset_election_timeout()
+    def _send_heartbeats(self):
+        logger.debug(f"{self.node_id}: Sending heartbeats or log entries to peers")
 
-                if prev_log_index == -1 or (
-                    prev_log_index < len(self.log) and self.log[prev_log_index]['term'] == prev_log_term
-                ):
-                    for i, entry in enumerate(entries):
-                        log_index = prev_log_index + 1 + i
-                        if log_index >= len(self.log):
-                            self.log.append(entry)
-                        elif self.log[log_index]['term'] != entry['term']:
-                            self.log = self.log[:log_index]
-                            self.log.append(entry)
+        for peer in self.peers:
+            next_idx = self.next_index.get(peer, len(self.log))
+            prev_index = next_idx - 1
+            prev_term = self.log[prev_index]['term'] if prev_index >= 0 else 0
 
-                    if leader_commit > self.commit_index:
-                        self.commit_index = min(leader_commit, len(self.log) - 1)
-                    success = True
-                    logger.debug(f"{self.node_id}: AppendEntries successful from leader {leader_id}")
-                else:
-                    logger.debug(f"{self.node_id}: AppendEntries log mismatch from leader {leader_id}")
+            # If follower is up to date, send heartbeat
+            if next_idx >= len(self.log):
+                entries = []
             else:
-                logger.debug(f"{self.node_id}: Rejected AppendEntries from {leader_id} due to stale term")
+                # Follower is behind — send real entries
+                entries = self.log[next_idx:]
 
-            return {
-                "term": self.current_term,
-                "success": success
-            }
+            try:
+                response = requests.post(
+                    f"http://{peer}/raft/append_entries",
+                    json={
+                        "term": self.current_term,
+                        "leader_id": self.node_id,
+                        "prev_log_index": prev_index,
+                        "prev_log_term": prev_term,
+                        "entries": entries,
+                        "leader_commit": self.commit_index
+                    },
+                    timeout=1.0
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("success"):
+                        if entries:
+                            self.match_index[peer] = next_idx + len(entries) - 1
+                            self.next_index[peer] = self.match_index[peer] + 1
+                            logger.info(f"{self.node_id}: Updated match_index for {peer} to {self.match_index[peer]}")
+                    else:
+                        self.next_index[peer] = max(0, self.next_index[peer] - 1)
+                        logger.warning(
+                            f"{self.node_id}: AppendEntries failed for {peer}, backtracking next_index to {self.next_index[peer]}")
+                else:
+                    logger.warning(f"{self.node_id}: AppendEntries to {peer} failed with status {response.status_code}")
+            except Exception as e:
+                logger.warning(f"{self.node_id}: Failed to contact {peer}: {e}")
 
-    def append_entry(self, command: dict):
-        with self.lock:
-            if self.role != RaftRole.LEADER:
-                raise RuntimeError("Only the leader can append entries")
-
-            entry = {"term": self.current_term, "command": command}
-            self.log.append(entry)
-            index = len(self.log) - 1
-            logger.info(f"{self.node_id}: Appended new entry at index {index}: {entry}")
-
-        # Start replication in a background thread
-        threading.Thread(target=self._replicate_log_entry, args=(index,), daemon=True).start()
+        self.election_timeout = self._reset_election_timeout()
 
     def _replicate_log_entry(self, index: int):
         entry = self.log[index]
         success_count = 1  # count self
 
-        #TODO: This may need to be made configurable as a setting
-        if len(self.peers) == 0:
-            # Single-node cluster — commit immediately
-            with self.lock:
-                self.commit_index = index
-                logger.info(f"{self.node_id}: Single-node cluster, committed entry at index {index}")
-            return
+        # #TODO: This may need to be made configurable as a setting
+        # if len(self.peers) == 0:
+        #     # Single-node cluster — commit immediately
+        #     with self.lock:
+        #         self.commit_index = index
+        #         logger.info(f"{self.node_id}: Single-node cluster, committed entry at index {index}")
+        #     return
 
         for peer in self.peers:
             next_idx = self.next_index.get(peer, len(self.log))
@@ -300,6 +243,7 @@ class RaftNode:
                             break
                         else:
                             self.next_index[peer] = max(0, self.next_index[peer] - 1)
+                            next_idx = self.next_index[peer]
                             logger.info(
                                 f"{self.node_id}: AppendEntries to {peer} failed, decrementing next_index to {self.next_index[peer]}")
                     else:
@@ -314,40 +258,59 @@ class RaftNode:
                 self.commit_index = index
                 logger.info(f"{self.node_id}: Entry at index {index} committed")
 
-    def _apply_committed_entries(self):
-        while self.running:
-            time.sleep(0.1)
-            with self.lock:
-                if self.last_applied < self.commit_index:
-                    latest_index = self.commit_index
+    def handle_append_entries(self, term: int, leader_id: str, prev_log_index: int, prev_log_term: int,
+                              entries: List[dict], leader_commit: int) -> dict:
+        with self.lock:
+            success = False
+            if term >= self.current_term:
+                if self.current_term != term:
+                    logger.info(f"{self.node_id}: Updating to new term {term} from leader {leader_id}")
+                self.current_term = term
+                self.role = RaftRole.FOLLOWER
+                self.voted_for = None
+                self.election_timeout = self._reset_election_timeout()
 
-                    # Sanity check to avoid index error
-                    if latest_index >= len(self.log):
-                        logger.warning(
-                            f"{self.node_id}: Commit index {latest_index} exceeds log length {len(self.log)} — skipping apply"
-                        )
-                        continue
+                logger.info(f"prev_log_index: {prev_log_index}")
+                if prev_log_index == -1 or (
+                    prev_log_index < len(self.log) and self.log[prev_log_index]['term'] == prev_log_term
+                ):
+                    for i, entry in enumerate(entries):
+                        log_index = prev_log_index + 1 + i
+                        if log_index < len(self.log):
+                            if self.log[log_index]['term'] != entry['term']:
+                                self.log = self.log[:log_index]
+                                self.log.extend(entries[i:])
+                                break
+                        else:
+                            self.log.append(entry)
 
-                    entry = self.log[latest_index]
-                    self._apply_entry(entry)
-                    self.last_applied = latest_index
+                    if leader_commit > self.commit_index:
+                        self.commit_index = min(leader_commit, len(self.log) - 1)
+                    success = True
+                    logger.debug(f"{self.node_id}: AppendEntries successful from leader {leader_id}")
+                else:
+                    logger.debug(f"{self.node_id}: AppendEntries log mismatch from leader {leader_id}")
+            else:
+                logger.debug(f"{self.node_id}: Rejected AppendEntries from {leader_id} due to stale term")
 
-    def _apply_entry(self, entry: dict):
-        cmd = entry["command"]
-        cmd_type = cmd.get("type")
-        cmd_data = cmd.get("data")
+            # Return if appending the entry was successful or not
+            return {
+                "term": self.current_term,
+                "success": success
+            }
 
-        logger.info(f"{self.node_id}: Applying log entry at index {self.last_applied}: {cmd_type}")
+    def append_entry(self, command: dict):
+        with self.lock:
+            if self.role != RaftRole.LEADER:
+                raise RuntimeError("Only the leader can append entries")
 
-        if cmd_type == "CONFIG_UPDATE":
-            # Call system method to update resource config
-            # For example: self.system.update_config(cmd_data)
-            pass
+            entry = {"term": self.current_term, "command": command}
+            self.log.append(entry)
+            index = len(self.log) - 1
+            logger.info(f"{self.node_id}: Appended new entry at index {index}: {entry}")
 
-        elif cmd_type == "SET_STATE":
-            # Call system method to set desired state
-            # For example: self.system.set_resource_state(cmd_data["resource"], cmd_data["state"])
-            pass
+        # Start replication in a background thread
+        threading.Thread(target=self._replicate_log_entry, args=(index,), daemon=True).start()
 
     def get_latest_config(self) -> ClusterConfig:
         with self.lock:
@@ -366,6 +329,28 @@ class RaftNode:
             "data": config.model_dump()
         }
         self.append_entry(entry)
+
+    def _run(self):
+        while self.running:
+            time.sleep(0.1)
+            with self.lock:
+                now = time.time()
+
+                if self.role == RaftRole.LEADER:
+                    logger.debug(f"{self.node_id}: Running as leader in term {self.current_term}")
+                    self._send_heartbeats()
+                elif now >= self.election_timeout:
+                    logger.info(f"{self.node_id}: Election timeout reached, starting election")
+                    self._start_election()
+
+    def start(self):
+        with self.lock:
+            if not self.running:
+                self.running = True
+                self.thread = threading.Thread(target=self._run, name=f"raft-{self.node_id}", daemon=True)
+                self.thread.start()
+
+                logger.info(f"{self.node_id}: Raft node started")
 
     def stop(self):
         with self.lock:
