@@ -207,6 +207,16 @@ class RaftNode:
             except Exception as e:
                 logger.warning(f"{self.node_id}: Failed to contact {peer}: {e}")
 
+        # Update leader commit index if the majority of nodes have been updated
+        match_indexes = list(self.peer_match_index.values()) + [len(self.log) - 1]  # include leader itself
+        match_indexes.sort(reverse=True)
+        majority_index = match_indexes[len(match_indexes) // 2] # Retrieve the median index value from all nodes
+
+        # Only advance commit_index for entries from the current term
+        if majority_index > self.commit_index and self.log[majority_index]['term'] == self.current_term:
+            self.commit_index = majority_index
+            logger.info(f"{self.node_id}: Advanced commit_index to {self.commit_index}")
+
         self.election_timeout = self._reset_election_timeout()
 
     def handle_append_entries(self, term: int, leader_id: str, prev_log_index: int, prev_log_term: int,
