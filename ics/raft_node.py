@@ -292,6 +292,34 @@ class RaftNode:
         }
         self.append_entry(entry)
 
+    def _apply_committed_entries(self):
+        while self.running:
+            time.sleep(0.1)
+            with self.lock:
+                if self.last_applied < self.commit_index:
+                    latest_index = self.commit_index # Only apply the latest commit log entry
+
+                    # Sanity check to avoid index error
+                    if latest_index >= len(self.log):
+                        logger.warning(f"{self.node_id}: Commit index {latest_index} exceeds log length {len(self.log)} skipping apply")
+                        continue
+
+                    entry = self.log[latest_index]
+                    self._apply_entry(entry)
+                    self.last_applied = latest_index
+
+    def _apply_entry(self, entry: dict):
+        cmd = entry["command"]
+        cmd_type = cmd.get("type")
+        cmd_data = cmd.get("data")
+
+        logger.info(f"{self.node_id}: Applying log entry at index {self.commit_index}: {cmd_type}")
+
+        if cmd_type == "CONFIG_UPDATE":
+            # Call system method to update resource config
+            # For example: self.system.update_config(cmd_data)
+            pass
+
     def _run(self):
         while self.running:
             time.sleep(0.1)
@@ -311,6 +339,13 @@ class RaftNode:
                 self.running = True
                 self.thread = threading.Thread(target=self._run, name=f"raft-{self.node_id}", daemon=True)
                 self.thread.start()
+
+                self.applier_thread = threading.Thread(
+                    target=self._apply_committed_entries,
+                    name=f"raft-applier-{self.node_id}",
+                    daemon=True
+                )
+                self.applier_thread.start()
 
                 logger.info(f"{self.node_id}: Raft node started")
 
