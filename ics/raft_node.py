@@ -110,8 +110,8 @@ class RaftNode:
 
         # Reset the peer next_index values to the index just after the last one in its log
         for peer in self.peers:
-            self.peer_next_index[peer] = len(self.log) # Set peer next index to resend last log
-            self.peer_match_index[peer] = 0
+            self.peer_next_index[peer] = max(0, len(self.log) - 1)  # Set peer next index to resend last log
+            self.peer_match_index[peer] = -1
         self._send_heartbeats()
 
     def handle_request_vote(self, term: int, candidate_id: str, last_log_index: int, last_log_term: int) -> dict:
@@ -173,8 +173,10 @@ class RaftNode:
             if next_index >= len(self.log):
                 entries = []
             else:
-                # Follower is behind — send real entries
+                # Follower is behind send real entries
                 entries = self.log[next_index:]
+                entry_count = len(entries)
+                logger.info(f"{self.node_id}: Peer {peer} is behind, sending {entry_count} log entries starting from index {next_index}")
 
             try:
                 response = requests.post(
@@ -210,6 +212,10 @@ class RaftNode:
     def handle_append_entries(self, term: int, leader_id: str, prev_log_index: int, prev_log_term: int,
                               entries: List[dict], leader_commit: int) -> dict:
         with self.lock:
+
+            entries_length = len(entries)
+            logger.info(f"Received {entries_length} new entries from leader {leader_id}")
+
             success = False
             if term >= self.current_term:
                 if self.current_term != term:
