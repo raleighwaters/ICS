@@ -30,6 +30,10 @@ def create_api(raft_node):
     async def raft_config():
         return raft_node.get_latest_config()
 
+    @app.get("/raft/log")
+    async def raft_log():
+        return raft_node.log
+
     @app.post("/raft/request_vote")
     async def request_vote(data: RequestVoteRequest):
         if not raft_node:
