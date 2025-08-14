@@ -16,7 +16,7 @@ from ics.utils import hostname
 
 def start_api(raft_node):
     app = create_api(raft_node)
-    uvicorn.run(app, host="0.0.0.0", port=settings.api_port)
+    uvicorn.run(app, host="0.0.0.0", port=settings.api_port, log_config=None)
 
 
 def start_system_server(system):
