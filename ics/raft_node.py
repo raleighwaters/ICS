@@ -224,7 +224,7 @@ class RaftNode:
         with self.lock:
 
             entries_length = len(entries)
-            logger.info(f"Received {entries_length} new entries from leader {leader_id}")
+            logger.debug(f"Received {entries_length} new entries from leader {leader_id}")
 
             success = False
             if term >= self.current_term:
@@ -235,7 +235,7 @@ class RaftNode:
                 self.voted_for = None
                 self.election_timeout = self._reset_election_timeout()
 
-                logger.info(f"prev_log_index: {prev_log_index}")
+                logger.debug(f"prev_log_index: {prev_log_index}")
                 if prev_log_index == -1 or (
                     prev_log_index < len(self.log) and self.log[prev_log_index]['term'] == prev_log_term
                 ):
