@@ -67,9 +67,9 @@ class ICSSettings(BaseSettings):
         return cls(**config_data)
 
     def log_settings(self):
-        logger.debug("Application settings:")
+        logger.info("Application settings:")
         for key, value in self.model_dump().items():
-            logger.debug(f"   {key} = {value}")
+            logger.info(f"   {key} = {value}")
 
         if not self.alert_recipients:
             logger.warning("ICS alert recipients are not configured! No alerts will be sent.")
