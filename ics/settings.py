@@ -33,6 +33,7 @@ class ICSSettings(BaseSettings):
     api_port: int = Field(5000)
 
     alert_recipients: Optional[List[str]] = None
+    peers: Optional[List[str]] = None
     alert_level: str = Field("NOTSET")
 
     group_limit: int = Field(200)
@@ -72,5 +73,25 @@ class ICSSettings(BaseSettings):
 
         if not self.alert_recipients:
             logger.warning("ICS alert recipients are not configured! No alerts will be sent.")
+
+    def load_from_file(self, config_file: str):
+
+        path = Path(config_file)
+
+        if not path.exists():
+            raise FileNotFoundError(f"Config file not found: {path}")
+
+        with open(path, "r") as f:
+            config_data = yaml.safe_load(f) or {}
+
+        for key, value in config_data.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                logger.warning(f"Ignored unknown setting '{key}' in {path}")
+
+        self.model_post_init(None)
+        logger.info(f"Settings reloaded from {path}")
+
 
 settings = ICSSettings.load()

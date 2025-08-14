@@ -1,3 +1,4 @@
+import argparse
 import logging
 import uvicorn
 import socket
@@ -50,18 +51,36 @@ def start_alert_server():
     )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="ICS Daemon")
+    parser.add_argument("--api-port", type=int, help="Port for the API server")
+    parser.add_argument("--config", type=str, help="Path to alternate config YAML file")
+
+    return parser.parse_args()
+
+
 def main():
     setup_logging()
     logger = logging.getLogger("icsd")
     logger.info("Starting ICS Daemon")
     logger.info('Python version: ' + sys.version.replace('\n', ''))
 
+    args = parse_args()
+
+    if args.config:
+        settings.load_from_file(args.config)
+
+    # Override settings with CLI arguments if provided
+    if args.api_port:
+        settings.api_port = args.api_port
+
+
     settings.log_settings()
 
     system = NodeSystem()
 
     node_id = hostname()
-    peers = [] # Expecting a list like ['host1:5000', 'host2:5000']
+    peers = settings.peers
     raft_node = RaftNode(node_id=node_id, peers=peers)
     raft_node.start()
 
