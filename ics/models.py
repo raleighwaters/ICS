@@ -2,14 +2,32 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 from enum import Enum
 
+
+# ----- Common / enums -----
+
 class ResourceState(str, Enum):
     ONLINE = "online"
     OFFLINE = "offline"
 
-class ResourceSpec(BaseModel):
-    name: str
-    group: str
 
+# ----- Group models -----
+
+class GroupAttributes(BaseModel):
+    enabled: bool = False
+    autoStart: bool = False
+    ignoreDisabled: bool = True
+    parallel: bool = False
+
+
+class GroupSpec(BaseModel):
+    name: str
+    systemList: List[str] = []
+    attributes: GroupAttributes = GroupAttributes()
+
+
+# ----- Resource models -----
+
+class ResourceAttributes(BaseModel):
     enabled: bool = False
     startProgram: Optional[str] = ""
     stopProgram: Optional[str] = ""
@@ -23,20 +41,18 @@ class ResourceSpec(BaseModel):
     onlineTimeout: int = 60
     offlineTimeout: int = 60
     monitorTimeout: int = 60
-    load: int = 1
 
+
+class ResourceSpec(BaseModel):
+    name: str
+    group: str
+    load: int = 1
+    desired_state: ResourceState = ResourceState.OFFLINE
+    attributes: ResourceAttributes = ResourceAttributes()
     dependsOn: Optional[List[str]] = []
 
-    desired_state: ResourceState = ResourceState.OFFLINE
 
-class GroupSpec(BaseModel):
-    name: str
-    systemList: List[str] = []
-    enabled: bool = False
-    autoStart: bool = False
-    ignoreDisabled: bool = True
-    parallel: bool = False
-
+# ----- Raft RPCs -----
 
 class RequestVoteRequest(BaseModel):
     term: int
