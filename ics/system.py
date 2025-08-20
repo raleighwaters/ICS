@@ -1590,6 +1590,37 @@ class NodeSystem(AttributeObject):
                                                        'dependencies': resource.dependencies()}
         return config_data
 
+
+    def update_config(self, data: dict):
+        logger.info("Updating config...")
+        logger.debug(f"Config: {data}")
+
+        #TODO: This probably needs to happen more "atomically"
+        self.resources = {}
+        self.groups = {}
+
+        group_data = data["groups"]
+        for group_name in group_data:
+            self.grp_add(group_name)
+            group = self.get_group(group_name)
+            for attribute, value in group_data[group_name]["attributes"].items():
+                logger.debug(f"Attribute: {attribute}, Value: {value}")
+                group.set_attr(attribute[0].upper() + attribute[1:], value)
+
+        resource_data = data["resources"]
+        for resource_name in resource_data:
+            group_name = resource_data[resource_name]["group"]
+            self.res_add(resource_name, group_name, init_state=ResourceStates.UNKNOWN)
+            resource = self.get_resource(resource_name)
+            for attribute, value in resource_data[resource_name]["attributes"].items():
+                resource.set_attr(attribute[0].upper() + attribute[1:], value)
+
+        # Add dependencies
+        for resource_name in resource_data:
+            for dependency_name in resource_data[resource_name]['dependsOn']:
+                self.res_link(resource_name, dependency_name)
+
+
     def load_config(self, data):
         """Load system config file.
 

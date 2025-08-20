@@ -316,9 +316,16 @@ class RaftNode:
         logger.info(f"{self.node_id}: Applying log entry at index {self.commit_index}: {cmd_type}")
 
         if cmd_type == "CONFIG_UPDATE":
-            # Call system method to update resource config
-            # For example: self.system.update_config(cmd_data)
-            pass
+            if not self.system:
+                logger.warning(f"{self.node_id}: CONFIG_UPDATE committed but no NodeSystem bound; skipping")
+                return
+
+            try:
+                self.system.update_config(cmd_data)
+                logger.info(f"{self.node_id}: CONFIG_UPDATE applied")
+            except Exception:
+                logger.exception(f"{self.node_id}: CONFIG_UPDATE apply failed")
+
 
     def _run(self):
         while self.running:
