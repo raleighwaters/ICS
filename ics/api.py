@@ -141,4 +141,23 @@ def create_api(raft_node):
         mutate_config(mutator)
         return {"status": "group set to offline"}
 
+
+    # -------- State --------
+
+    @app.get("/state/nodes")
+    async def state_notes():
+        pass
+
+    @app.get("/state/groups")
+    async def state_groups():
+        pass
+
+    @app.get("/state/resources")
+    async def state_resources():
+        pass
+
+    @app.get("/state/resources/local")
+    async def state_resources_local():
+        pass
+
     return app
