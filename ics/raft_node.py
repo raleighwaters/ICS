@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 from ics.system import NodeSystem
 from ics.cluster_config import ClusterConfig
-
+from ics.settings import settings
 
 class RaftRole(enum.Enum):
     FOLLOWER = 'Follower'
@@ -48,6 +48,10 @@ class RaftNode:
         self.thread: Optional[threading.Thread] = None
 
         self.applier_thread: Optional[threading.Thread] = None
+
+    def nodes(self) -> List[str]:
+        """Returns a list of all node IDs in the cluster, including self."""
+        return [self.node_id + f':{settings.api_port}'] + self.peers
 
     def get_status(self):
         with self.lock:
