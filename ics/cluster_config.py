@@ -19,6 +19,9 @@ class ClusterConfig(BaseModel):
         if resource_name not in self.resources:
             raise ValueError(f"Resource '{resource_name}' not found")
 
+    def resource_names(self):
+        return self.resources.keys()
+
     def add_group(self, group: GroupSpec):
         if group.name in self.groups:
             raise ValueError(f"Group '{group.name}' already exists")
