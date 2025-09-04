@@ -74,6 +74,25 @@ class ClusterConfig(BaseModel):
         self.resources[resource_name].desired_state = ResourceState.OFFLINE
         logger.info(f"Resource '{resource_name}' set to OFFLINE")
 
+    def res_attr(self, resource_name: str):
+        self._ensure_resource_exists(resource_name)
+        logger.debug(self.resources[resource_name])
+        return self.resources[resource_name].attributes.model_dump()
+
+    def res_attr_update(self, resource_name: str, updates: dict):
+        self._ensure_resource_exists(resource_name)
+        logger.debug(f"Updating attributes of resource '{resource_name}' with {updates}")
+        resource = self.resources[resource_name]
+
+        # Validate all keys
+        for key in updates:
+            if key not in resource.attributes.model_fields:
+                raise ValueError(f"Unknown attribute '{key}' for resource '{resource_name}'")
+
+        # Use model_copy to return a new instance with updates
+        resource.attributes = resource.attributes.model_copy(update=updates)
+
+
     def grp_online(self, group_name: str):
         self._ensure_group_exists(group_name)
         for res_config in self.resources.values():
