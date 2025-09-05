@@ -7,12 +7,12 @@ from ics.cli.common import API_BASE, epilog_text, check_response, print_table
 
 
 def res_online(name: str, system: str):
-    response = requests.get(f"{API_BASE}/resources/{name}/online")
+    response = requests.put(f"{API_BASE}/resources/{name}/online", payload={"state": "online"})
     check_response(response)
 
 
 def res_offline(name: str, system: str):
-    response = requests.get(f"{API_BASE}/resources/{name}/offline")
+    response = requests.put(f"{API_BASE}/resources/{name}/offline", payload={"state": "online"})
     check_response(response)
 
 
