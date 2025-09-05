@@ -51,6 +51,20 @@ class ClusterConfig(BaseModel):
         self.resources[resource.name] = resource
         logger.info(f"Resource '{resource.name}' added")
 
+    def update_resource(self, resource_name: str, updates: dict):
+        self._ensure_resource_exists(resource_name)
+        resource = self.resources[resource_name]
+
+        for key, value in updates.items():
+            if key == "attributes":
+                if not isinstance(value, dict):
+                    raise ValueError("attributes must be a dictionary")
+                resource.attributes = resource.attributes.model_copy(update=value)
+            elif key in resource.model_fields:
+                setattr(resource, key, value)
+            else:
+                raise ValueError(f"Unknown field '{key}' in resource update")
+
     def delete_resource(self, resource_name: str):
         self._ensure_resource_exists(resource_name)
         # Ensure no other resource depends on this one
