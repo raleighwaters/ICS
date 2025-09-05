@@ -1689,20 +1689,20 @@ class NodeSystem(AttributeObject):
         logger.info('Server starting up...')
         # TODO: Add config startup management here
         data = {}
-        try:
-            data = read_config(settings.conf_file)
-        except FileNotFoundError:
-            if not os.path.exists(settings.conf_dir):
-                os.makedirs(settings.conf_dir)
-
-        if data:
-            try:
-                self.load_config(data)
-            except Exception as err:
-                logger.critical('Error reading config data: {}'.format(str(err)))
-                sys.exit(1)  # TODO: better system handling
-        else:
-            logger.info('No configuration data found')
+        # try:
+        #     data = read_config(settings.conf_file)
+        # except FileNotFoundError:
+        #     if not os.path.exists(settings.conf_dir):
+        #         os.makedirs(settings.conf_dir)
+        #
+        # if data:
+        #     try:
+        #         self.load_config(data)
+        #     except Exception as err:
+        #         logger.critical('Error reading config data: {}'.format(str(err)))
+        #         sys.exit(1)  # TODO: better system handling
+        # else:
+        #     logger.info('No configuration data found')
 
         if self.node_name not in self.attr_value('NodeList'):
             self.attr_append_value('NodeList', self.node_name)
@@ -1716,7 +1716,7 @@ class NodeSystem(AttributeObject):
         self.start_poll_updater()
         self.startup_poll()
         self.poll_enabled = True
-        self.start_config_backup()
+        #self.start_config_backup()
         self.grp_online_auto()
 
         logger.info('Server startup complete')
