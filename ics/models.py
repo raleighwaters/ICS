@@ -74,3 +74,4 @@ class AppendEntriesRequest(BaseModel):
 
 class ResourceStateUpdate(BaseModel):
     state: ResourceDesiredState
+    node: str
