@@ -103,6 +103,10 @@ class ClusterConfig(BaseModel):
                 res_config.desired_state = ResourceState.OFFLINE
                 logger.info(f"Resource '{res_config.name}' in group '{group_name}' set to OFFLINE")
 
+    def res_dependency(self, resource_name: str):
+        self._ensure_resource_exists(resource_name)
+        return self.resources[resource_name].dependsOn
+
     def link_dependency(self, resource_name: str, dependency_name: str):
         self._ensure_resource_exists(resource_name)
         self._ensure_resource_exists(dependency_name)
