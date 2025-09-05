@@ -859,6 +859,9 @@ class NodeSystem(AttributeObject):
         group = self.get_group(group_name)
         return group.attr_list()
 
+    def res_names(self):
+        return self.resources.keys()
+
     def get_resource(self, resource_name):
         """Get resource object from resources list.
 
