@@ -256,7 +256,7 @@ def create_api(raft_node, system):
     @app.get("/local/resources/{name}/probe")
     async def local_resource_probe(name: str):
         check_resource(name, system)
-        system.res_state(name)
+        system.res_probe(name)
         return {"status": "success"}
 
     # -------- Local Groups --------
