@@ -15,8 +15,8 @@ from ics.system import NodeSystem
 from ics.alerts import AlertHandler
 from ics.utils import hostname
 
-def start_api(raft_node):
-    app = create_api(raft_node)
+def start_api(raft_node, system):
+    app = create_api(raft_node, system)
     uvicorn.run(app, host="0.0.0.0", port=settings.api_port, log_config=None)
 
 
@@ -96,7 +96,7 @@ def main():
 
     # Run FastAPI in main thread
     logger.info("FastAPI server started on port 5000")
-    start_api(raft_node)
+    start_api(raft_node, system)
 
 
 if __name__ == "__main__":
