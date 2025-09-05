@@ -60,14 +60,6 @@ class ClusterConfig(BaseModel):
         del self.resources[resource_name]
         logger.info(f"Resource '{resource_name}' deleted")
 
-    def update_resource(self, resource_name: str, updated: ResourceSpec):
-        if resource_name != updated.name:
-            raise ValueError("Resource name mismatch")
-        if updated.group not in self.groups:
-            raise ValueError(f"Group '{updated.group}' does not exist")
-        self.resources[resource_name] = updated
-        logger.info(f"Resource '{resource_name}' updated")
-
     def res_online(self, resource_name: str):
         self._ensure_resource_exists(resource_name)
         self.resources[resource_name].desired_state = ResourceState.ONLINE
