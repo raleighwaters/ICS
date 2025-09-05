@@ -4,9 +4,8 @@ import yaml
 from pathlib import Path
 import sys
 
-from ics.settings import settings
 
-API_BASE = f"http://localhost:{settings.api_port}"
+from ics.cli.common import API_BASE
 
 def ping():
     try:
