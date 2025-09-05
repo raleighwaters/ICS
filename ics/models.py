@@ -5,7 +5,7 @@ from enum import Enum
 
 # ----- Common / enums -----
 
-class ResourceState(str, Enum):
+class ResourceDesiredState(str, Enum):
     ONLINE = "online"
     OFFLINE = "offline"
 
@@ -47,7 +47,7 @@ class ResourceAttributes(BaseModel):
 class ResourceSpec(BaseModel):
     name: str
     group: str
-    desired_state: ResourceState = ResourceState.OFFLINE
+    desired_state: ResourceDesiredState = ResourceDesiredState.OFFLINE
     attributes: ResourceAttributes = ResourceAttributes()
     dependsOn: Optional[List[str]] = []
 
@@ -68,3 +68,9 @@ class AppendEntriesRequest(BaseModel):
     prev_log_term: int
     entries: List[Dict]
     leader_commit: int
+
+
+# ----- API -----
+
+class ResourceStateUpdate(BaseModel):
+    state: ResourceDesiredState
