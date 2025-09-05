@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 import httpx
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +79,7 @@ async def cluster_resource_state(raft_node, system, name):
         "data": {node_id: local_state}
     }
 
-    remote_results = await fan_out_api_call(f"/local/resources/{name}/state", raft_node)
+    remote_results = await fan_out_api_call(f"local/resources/{name}/state", raft_node)
     result["data"].update(remote_results)
     return result
 
@@ -96,7 +97,7 @@ async def cluster_resource_clear(raft_node, system, name):
         "data": {name: {node_id: local_status}}
     }
 
-    remote_results = await fan_out_api_call(f"/local/resources/{name}/clear", raft_node)
+    remote_results = await fan_out_api_call(f"local/resources/{name}/clear", raft_node)
     result["data"][name].update(remote_results)
     return result
 
@@ -114,6 +115,6 @@ async def cluster_resource_probe(raft_node, system, name):
         "data": {name: {node_id: local_status}}
     }
 
-    remote_results = await fan_out_api_call(f"/local/resources/{name}/probe", raft_node)
+    remote_results = await fan_out_api_call(f"local/resources/{name}/probe", raft_node)
     result["data"][name].update(remote_results)
     return result
