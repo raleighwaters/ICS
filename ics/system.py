@@ -1024,7 +1024,19 @@ class NodeSystem(AttributeObject):
         self.config_update = True
         logger.info('Resource({}) resource deleted'.format(resource_name))
 
-    @Pyro.expose
+    def res_state(self, resource_name):
+        """Return state for a given resource.
+
+        Args:
+            resource_name (str): Resource name.
+
+        Returns:
+            str: String representation of resource state in all upper case.
+
+        """
+        resource = self.get_resource(resource_name)
+        return resource.state.upper()
+
     def clus_res_state(self, resource_name):
         """Generate dictionary of resource states on all cluster nodes.
 
@@ -1063,37 +1075,23 @@ class NodeSystem(AttributeObject):
     #                                                                            remote=True)
     #     return resource_states
 
-    @Pyro.expose
-    def res_state(self, resource_name):
-        """Return state for a given resource.
-
-        Args:
-            resource_name (str): Resource name.
-
-        Returns:
-            str: String representation of resource state in all upper case.
-
-        """
-        resource = self.get_resource(resource_name)
-        return resource.state.upper()
-
-    def res_state_many(self, resource_list, include_node=False):
+    def res_state_many(self, names=None, include_node=False):
         """Return states for a given list of resource.
 
         Args:
-            resource_list (list): List of resource names.
+            names(list): List of resource names.
             include_node: Include node name in output.
 
         Returns:
             list: resource names with resource states.
 
         """
-        resources = []
         resource_states = []
         node_name = self.attr_value('NodeName')
 
-        if resource_list:
-            for resource_name in resource_list:
+        if names:
+            resources = []
+            for resource_name in names:
                 resources.append(self.get_resource(resource_name))
         else:
             resources = self.resources.values()
