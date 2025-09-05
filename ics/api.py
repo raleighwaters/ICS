@@ -3,7 +3,8 @@ import logging
 from fastapi import FastAPI, HTTPException, Request
 
 import ics.errors
-from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest
+from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest, ResourceDesiredState
+from ics.models import ResourceStateUpdate
 from ics.cluster_config import ClusterConfig
 from ics.cluster_actions import cluster_resource_states, cluster_resource_probe, cluster_resource_state, cluster_resource_clear
 
@@ -119,24 +120,25 @@ def create_api(raft_node, system):
         mutate_config(mutator)
         return {"status": "deleted", "name": name}
 
-    @app.post("/resources/{name}/online")
-    async def res_online(name: str):
-        def mutator(config: ClusterConfig):
-            config.res_online(name)
-        mutate_config(mutator)
-        return {"status": "resource set to online"}
-
-    @app.post("/resources/{name}/offline")
-    async def res_offline(name: str):
-        def mutator(config: ClusterConfig):
-            config.res_offline(name)
-        mutate_config(mutator)
-        return {"status": "resource set to offline"}
-
     @app.get("/resources/{name}/state")
     async def res_state(name: str):
         check_resource(name, system)
         return await cluster_resource_state(raft_node, system, name)
+
+    @app.put("/resources/{name}/state")
+    async def change_resource_state(name: str, state_update: ResourceStateUpdate):
+        check_resource(name, system)
+        desired_state = state_update.state
+        def mutator(config: ClusterConfig):
+            if desired_state == ResourceDesiredState.ONLINE:
+                config.res_online(name)
+            elif desired_state == ResourceDesiredState.OFFLINE:
+                config.res_offline(name)
+            else:
+                raise HTTPException(status_code=400, detail="Invalid state '{desired_state}'")
+        mutate_config(mutator)
+
+        return {"status": "success", "message": f"Resource '{name}' set to '{desired_state}'"}
 
     @app.get("/resources/{name}/dependency")
     async def res_dependency(name: str):
