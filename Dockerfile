@@ -16,7 +16,7 @@ RUN pip3 install -r requirements.txt
 # Copy application scripts and resources
 COPY ./setup_alias.sh /app
 COPY ./ics /app/ics
-COPY ./ics_lab/test /app/test
+COPY ./test_lab/test /app/test
 COPY ./examples /app/examples
 
 # Create required directories

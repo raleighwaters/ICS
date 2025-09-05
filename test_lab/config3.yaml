@@ -1,0 +1,4 @@
+peers:
+  - node1:5000
+  - node2:5000
+log_dir: /app/data/log
