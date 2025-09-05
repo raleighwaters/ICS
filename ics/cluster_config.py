@@ -37,6 +37,10 @@ class ClusterConfig(BaseModel):
         del self.groups[group_name]
         logger.info(f"Group '{group_name}' deleted")
 
+    def resource(self, name: str):
+        self._ensure_resource_exists(name)
+        return self.resources[name].model_dump()
+
     def add_resource(self, resource: ResourceSpec):
         if resource.name in self.resources:
             raise ValueError(f"Resource '{resource.name}' already exists")
