@@ -41,12 +41,12 @@ class ResourceAttributes(BaseModel):
     onlineTimeout: int = 60
     offlineTimeout: int = 60
     monitorTimeout: int = 60
+    load: int = 1
 
 
 class ResourceSpec(BaseModel):
     name: str
     group: str
-    load: int = 1
     desired_state: ResourceState = ResourceState.OFFLINE
     attributes: ResourceAttributes = ResourceAttributes()
     dependsOn: Optional[List[str]] = []
