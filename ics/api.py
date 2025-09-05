@@ -1,10 +1,30 @@
+import logging
+
 from fastapi import FastAPI, HTTPException, Request
 
+import ics.errors
 from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest
 from ics.cluster_config import ClusterConfig
+from ics.cluster_actions import cluster_resource_states, cluster_resource_probe, cluster_resource_state, cluster_resource_clear
 
 
-def create_api(raft_node):
+logger = logging.getLogger(__name__)
+
+def check_resource(name, system):
+    try:
+        system.get_resource(name)
+    except ics.errors.ICSError:
+        logger.error(f"Resource {name} not found in system")
+        raise HTTPException(status_code=404, detail=f"Resource {name} not found")
+
+def check_group(name, system):
+    try:
+        system.get_group(name)
+    except ics.errors.ICSError:
+        raise HTTPException(status_code=404, detail=f"Group {name} not found")
+
+
+def create_api(raft_node, system):
 
     app = FastAPI(title="ICS API", version="3.0.0")
 
@@ -85,6 +105,13 @@ def create_api(raft_node):
         mutate_config(mutator)
         return {"status": "added", "name": resource.name}
 
+    @app.get("/resources/{name}")
+    async def get_resource(name: str):
+        check_resource(name, system)
+        config = raft_node.get_latest_config()
+        data = config.resource(name)
+        return {"data": data}
+
     @app.delete("/resources/{name}")
     async def delete_resource(name: str):
         def mutator(config: ClusterConfig):
@@ -105,6 +132,68 @@ def create_api(raft_node):
             config.res_offline(name)
         mutate_config(mutator)
         return {"status": "resource set to offline"}
+
+    @app.get("/resources/{name}/state")
+    async def res_state(name: str):
+        check_resource(name, system)
+        return await cluster_resource_state(raft_node, system, name)
+
+    @app.get("/resources/{name}/dependency")
+    async def res_dependency(name: str):
+        check_resource(name, system)
+        config = raft_node.get_latest_config()
+        dependencies = config.res_dependency(name)
+        return {"data": dependencies}
+
+    @app.put("/resources/{name}/dependency/{dep_name}")
+    async def add_resource_dependency(name: str, dep_name: str):
+        check_resource(name, system)
+        check_resource(dep_name, system)
+
+        def mutator(config: ClusterConfig):
+            try:
+                config.link_dependency(name, dep_name)
+            except ValueError as err:
+                raise HTTPException(status_code=400, detail=f"{err}")
+
+        mutate_config(mutator)
+        return {"status": "added", "resource": name, "dependency": dep_name}
+
+    @app.delete("/resources/{name}/dependency/{dep_name}")
+    async def remove_resource_dependency(name: str, dep_name: str):
+        check_resource(name, system)
+
+        def mutator(config: ClusterConfig):
+            try:
+                config.unlink_dependency(name, dep_name)
+            except ValueError as err:
+                raise HTTPException(status_code=400, detail=f"{err}")
+
+        mutate_config(mutator)
+        return {"status": "removed", "resource": name, "dependency": dep_name}
+
+    @app.get("/resources/{name}/clear")
+    async def resource_clear(name: str):
+        check_resource(name, system)
+        return await cluster_resource_clear(raft_node, system, name)
+
+    @app.get("/resources/{name}/probe")
+    async def resource_probe(name: str):
+        check_resource(name, system)
+        return await cluster_resource_probe(raft_node, system, name)
+
+    @app.patch("/resources/{name}/attributes")
+    async def modify_resources_attributes(name: str, updates: dict):
+        check_resource(name, system)
+
+        def mutator(config: ClusterConfig):
+            try:
+                config.res_attr_update(name, updates)
+            except ValueError as err:
+                raise HTTPException(status_code=400, detail=str(err))
+
+        mutate_config(mutator)
+        return {"status": "updated"}
 
     # -------- Groups --------
 
@@ -141,7 +230,6 @@ def create_api(raft_node):
         mutate_config(mutator)
         return {"status": "group set to offline"}
 
-
     # -------- State --------
 
     @app.get("/state/nodes")
@@ -154,10 +242,37 @@ def create_api(raft_node):
 
     @app.get("/state/resources")
     async def state_resources():
+        return await cluster_resource_states(raft_node, system)
+
+    # -------- Local Resources --------
+
+    @app.get("/local/resources/{name}/clear")
+    async def local_resource_clear(name: str):
+        check_resource(name, system)
+        system.res_clear(name)
+        return {"status": "success"}
+
+
+    @app.get("/local/resources/{name}/probe")
+    async def local_resource_probe(name: str):
+        check_resource(name, system)
+        system.res_state(name)
+        return {"status": "success"}
+
+    # -------- Local Groups --------
+
+    # -------- Local States --------
+
+    @app.get("/local/state/groups")
+    async def state_groups_local():
         pass
 
-    @app.get("/state/resources/local")
+    @app.get("/local/state/resources")
     async def state_resources_local():
-        pass
+        config = raft_node.get_latest_config()
+        resources = config.resource_names()
+        return {
+            "data": { name: system.res_state(name) for name in resources }
+        }
 
     return app
