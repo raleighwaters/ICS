@@ -122,6 +122,12 @@ class RaftNode:
                 "match_index": self.peer_match_index
             }
 
+    def is_leader(self) -> bool:
+        if self.role == RaftRole.LEADER:
+            return True
+        else:
+            return False
+
     def _reset_election_timeout(self) -> float:
         timeout = random.uniform(5.0, 9.0)
         logger.debug(f"{self.local_node}: Reset election timeout to {timeout:.2f} seconds")
