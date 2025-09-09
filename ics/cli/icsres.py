@@ -12,7 +12,7 @@ def res_online(name: str, system: str):
 
 
 def res_offline(name: str, system: str):
-    response = requests.put(f"{API_BASE}/resources/{name}/state", json={"state": "online", "node": system})
+    response = requests.put(f"{API_BASE}/resources/{name}/state", json={"state": "offline", "node": system})
     check_response(response)
 
 
