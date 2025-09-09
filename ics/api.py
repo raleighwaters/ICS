@@ -1,13 +1,17 @@
 import logging
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
+import httpx
 
 import ics.errors
-from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest, ResourceDesiredState
+from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest, ResourceDesiredState, \
+    GroupDesiredState, GroupStateUpdate
 from ics.models import ResourceStateUpdate
+from ics.raft_node import Node
 from ics.cluster_config import ClusterConfig
-from ics.cluster_actions import cluster_resource_states, cluster_resource_probe, cluster_resource_state, cluster_resource_clear
+from ics.cluster_actions import cluster_group_state_change
 
+from ics.cluster_actions import cluster_resource_states, cluster_resource_probe, cluster_resource_state, cluster_resource_clear, cluster_resource_state_change
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +101,7 @@ def create_api(raft_node, system):
 
         result = raft_node.handle_request_vote(
             term=data.term,
-            candidate_id=data.candidate_id,
+            candidate_node=Node.from_string(data.candidate_id),
             last_log_index=data.last_log_index,
             last_log_term=data.last_log_term,
         )
@@ -169,17 +173,7 @@ def create_api(raft_node, system):
     @app.put("/resources/{name}/state")
     async def change_resource_state(name: str, state_update: ResourceStateUpdate):
         check_resource(name, system)
-        desired_state = state_update.state
-        def mutator(config: ClusterConfig):
-            if desired_state == ResourceDesiredState.ONLINE:
-                config.res_online(name)
-            elif desired_state == ResourceDesiredState.OFFLINE:
-                config.res_offline(name)
-            else:
-                raise HTTPException(status_code=400, detail="Invalid state '{desired_state}'")
-        mutate_config(mutator)
-
-        return {"status": "success", "message": f"Resource '{name}' set to '{desired_state}'"}
+        return await cluster_resource_state_change(raft_node, system, name, state_update.node, state_update.state)
 
     @app.get("/resources/{name}/dependency")
     async def res_dependency(name: str):
@@ -274,19 +268,10 @@ def create_api(raft_node, system):
         mutate_config(mutator)
         return {"status": "deleted", "name": name}
 
-    @app.post("/groups/{name}/online")
-    async def grp_online(name: str):
-        def mutator(config: ClusterConfig):
-            config.grp_online(name)
-        mutate_config(mutator)
-        return {"status": "group set to online"}
-
-    @app.post("/groups/{name}/offline")
-    async def grp_offline(name: str):
-        def mutator(config: ClusterConfig):
-            config.grp_offline(name)
-        mutate_config(mutator)
-        return {"status": "group set to offline"}
+    @app.put("/groups/{name}/state")
+    async def change_group_state(name, state_update=GroupStateUpdate):
+        check_group(name, system)
+        return await cluster_group_state_change(raft_node, system, name, state_update.node, state_update.state)
 
     # -------- State --------
 
@@ -303,6 +288,16 @@ def create_api(raft_node, system):
         return await cluster_resource_states(raft_node, system)
 
     # -------- Local Resources --------
+
+    @app.put("/local/resources/{name}/state")
+    async def local_change_resource_state(name: str, state_update: ResourceStateUpdate):
+        check_resource(name, system)
+        if state_update.state == ResourceDesiredState.ONLINE:
+            system.res_online(name)
+        elif state_update.state == ResourceDesiredState.OFFLINE:
+            system.res_offline(name)
+
+        return {"status": "success"}
 
     @app.get("/local/resources/{name}/clear")
     async def local_resource_clear(name: str):
