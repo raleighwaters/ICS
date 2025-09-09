@@ -10,7 +10,44 @@ logger = logging.getLogger(__name__)
 
 from ics.system import NodeSystem
 from ics.cluster_config import ClusterConfig
-from ics.settings import settings
+
+
+class Node:
+    """
+    Represents a node in a raft cluster.
+
+    Attributes:
+        hostname (str): The hostname or IP of the node.
+        port (int): The port number of the node.
+    """
+    def __init__(self, hostname: str, port: int):
+        self.hostname = hostname
+        self.port = port
+
+    @property
+    def node_id(self) -> str:
+        return f"{self.hostname}:{self.port}"
+
+    @classmethod
+    def from_string(cls, node_id: str) -> "Node":
+        """Create a Node instance from a node_id (e.g. 'hostname:port')"""
+        hostname, port =  node_id.split(":")
+        return cls(hostname, int(port))
+
+    def __eq__(self, other):
+        if not isinstance(other, Node):
+            return False
+        return self.hostname == other.hostname and self.port == other.port
+
+    def __hash__(self):
+        return hash((self.hostname, self.port))
+
+    def __str__(self):
+        return self.node_id
+
+    def __repr__(self):
+        return f"Node(hostname={self.hostname}, port={self.port})"
+
 
 class RaftRole(enum.Enum):
     FOLLOWER = 'Follower'
@@ -19,15 +56,15 @@ class RaftRole(enum.Enum):
 
 
 class RaftNode:
-    def __init__(self, node_id: str, peers: List[str], system: Optional[NodeSystem] = None):
-        self.node_id = node_id
-        self.peers = peers  # List of other node IDs (IP:port)
+    def __init__(self, local_node: Node, peers: List[Node], system: Optional[NodeSystem] = None):
+        self.local_node = local_node
+        self.peers = peers  # List of remote Nodes
 
         self.system = system
 
         # Raft persistent state
         self.current_term = 0
-        self.voted_for: Optional[str] = None
+        self.voted_for: Optional[Node] = None
         self.log: List[dict] = []
 
         # Volatile state
@@ -35,8 +72,8 @@ class RaftNode:
         self.last_applied = -1  # Last applied log index
 
         # Leader state
-        self.peer_next_index: Dict[str, int] = {peer: 0 for peer in peers} # Next log entry to send to peer
-        self.peer_match_index: Dict[str, int] = {peer: -1 for peer in peers}  # Highest index known to be replicated on the peer
+        self.peer_next_index: Dict[Node, int] = {peer: 0 for peer in peers} # Next log entry to send to peer
+        self.peer_match_index: Dict[Node, int] = {peer: -1 for peer in peers}  # Highest index known to be replicated on the peer
 
         # Election state
         self.role = RaftRole.FOLLOWER
@@ -49,14 +86,14 @@ class RaftNode:
 
         self.applier_thread: Optional[threading.Thread] = None
 
-    def nodes(self) -> List[str]:
+    def nodes(self) -> list[Node]:
         """Returns a list of all node IDs in the cluster, including self."""
-        return [self.node_id + f':{settings.api_port}'] + self.peers
+        return self.peers + [self.local_node]
 
     def get_status(self):
         with self.lock:
             return {
-                "node_id": self.node_id,
+                "node_id": self.local_node.node_id,
                 "role": self.role.value,
                 "term": self.current_term,
                 "log_length": len(self.log),
@@ -68,15 +105,15 @@ class RaftNode:
 
     def _reset_election_timeout(self) -> float:
         timeout = random.uniform(5.0, 9.0)
-        logger.debug(f"{self.node_id}: Reset election timeout to {timeout:.2f} seconds")
+        logger.debug(f"{self.local_node}: Reset election timeout to {timeout:.2f} seconds")
         return time.time() + timeout
 
     def _start_election(self):
         self.role = RaftRole.CANDIDATE
         self.current_term += 1
-        self.voted_for = self.node_id
+        self.voted_for = self.local_node
         votes_received = 1  # Vote for self
-        logger.info(f"{self.node_id}: Starting election for term {self.current_term}")
+        logger.info(f"{self.local_node}: Starting election for term {self.current_term}")
 
         for peer in self.peers:
             try:
@@ -84,7 +121,7 @@ class RaftNode:
                     f"http://{peer}/raft/request_vote",
                     json={
                         "term": self.current_term,
-                        "candidate_id": self.node_id,
+                        "candidate_id": self.local_node.node_id,
                         "last_log_index": len(self.log) - 1,
                         "last_log_term": self.log[-1]['term'] if self.log else 0,
                     },
@@ -93,24 +130,24 @@ class RaftNode:
                 if response.status_code == 200:
                     result = response.json()
                     if result.get("vote_granted"):
-                        logger.info(f"{self.node_id}: Received vote from {peer}")
+                        logger.info(f"{self.local_node}: Received vote from {peer}")
                         votes_received += 1
                     else:
-                        logger.info(f"{self.node_id}: Vote from {peer} denied")
+                        logger.info(f"{self.local_node}: Vote from {peer} denied")
             except Exception as e:
-                logger.warning(f"{self.node_id}: Failed to request vote from {peer}: {e}")
+                logger.warning(f"{self.local_node}: Failed to request vote from {peer}: {e}")
 
         if votes_received > (len(self.peers) + 1) // 2:
             self._become_leader()
         else:
-            logger.info(f"{self.node_id}: Election failed with {votes_received} votes")
+            logger.info(f"{self.local_node}: Election failed with {votes_received} votes")
             self.role = RaftRole.FOLLOWER
             self.voted_for = None
             self.election_timeout = self._reset_election_timeout()
 
     def _become_leader(self):
         self.role = RaftRole.LEADER
-        logger.info(f"{self.node_id}: Became leader for term {self.current_term}")
+        logger.info(f"{self.local_node}: Became leader for term {self.current_term}")
 
         # Reset the peer next_index values to the index just after the last one in its log
         for peer in self.peers:
@@ -118,14 +155,14 @@ class RaftNode:
             self.peer_match_index[peer] = -1
         self._send_heartbeats()
 
-    def handle_request_vote(self, term: int, candidate_id: str, last_log_index: int, last_log_term: int) -> dict:
+    def handle_request_vote(self, term: int, candidate_node: Node, last_log_index: int, last_log_term: int) -> dict:
         with self.lock:
             vote_granted = False
 
             # Reject vote if given term is stale
             if term < self.current_term:
                 logger.debug(
-                    f"{self.node_id}: Rejected vote request from {candidate_id} (stale term {term} < current {self.current_term})")
+                    f"{self.local_node}: Rejected vote request from {candidate_node} (stale term {term} < current {self.current_term})")
                 return {
                     "term": self.current_term,
                     "vote_granted": False
@@ -133,22 +170,22 @@ class RaftNode:
 
             # Step down if term is newer
             if term > self.current_term:
-                logger.info(f"{self.node_id}: Newer term {term} detected from {candidate_id}, stepping down")
+                logger.info(f"{self.local_node}: Newer term {term} detected from {candidate_node}, stepping down")
                 self.current_term = term
                 self.voted_for = None
                 self.role = RaftRole.FOLLOWER
 
-            if term == self.current_term and (self.voted_for is None or self.voted_for == candidate_id):
+            if term == self.current_term and (self.voted_for is None or self.voted_for == candidate_node):
                 local_last_term = self.log[-1]['term'] if self.log else 0
                 local_last_index = len(self.log) - 1
                 if last_log_term > local_last_term or (
                     last_log_term == local_last_term and last_log_index >= local_last_index
                 ):
-                    self.voted_for = candidate_id
+                    self.voted_for = candidate_node
                     vote_granted = True
-                    logger.info(f"{self.node_id}: Voted for {candidate_id} in term {term}")
+                    logger.info(f"{self.local_node}: Voted for {candidate_node} in term {term}")
                 else:
-                    logger.info(f"{self.node_id}: Did not vote for {candidate_id} due to log inconsistency")
+                    logger.info(f"{self.local_node}: Did not vote for {candidate_node} due to log inconsistency")
 
             # Reset election timer if vote granted to reduce unnecessary elections
             if vote_granted:
@@ -160,13 +197,13 @@ class RaftNode:
             }
 
     def _send_heartbeats(self):
-        logger.debug(f"{self.node_id}: Sending heartbeats or log entries to peers")
+        logger.debug(f"{self.local_node}: Sending heartbeats or log entries to peers")
 
         for peer in self.peers:
 
             # If peer is missing from known index list, assume the peer is not up-to-date
             if peer not in self.peer_next_index:
-                logger.warning(f"{self.node_id}: No known next index for peer {peer}, assuming zero")
+                logger.warning(f"{self.local_node}: No known next index for peer {peer}, assuming zero")
                 self.peer_next_index[peer] = 0
 
             next_index = self.peer_next_index.get(peer)
@@ -180,14 +217,14 @@ class RaftNode:
                 # Follower is behind send real entries
                 entries = self.log[next_index:]
                 entry_count = len(entries)
-                logger.info(f"{self.node_id}: Peer {peer} is behind, sending {entry_count} log entries starting from index {next_index}")
+                logger.info(f"{self.local_node}: Peer {peer} is behind, sending {entry_count} log entries starting from index {next_index}")
 
             try:
                 response = requests.post(
                     f"http://{peer}/raft/append_entries",
                     json={
                         "term": self.current_term,
-                        "leader_id": self.node_id,
+                        "leader_id": self.local_node.node_id,
                         "prev_log_index": prev_index,
                         "prev_log_term": prev_term,
                         "entries": entries,
@@ -201,15 +238,15 @@ class RaftNode:
                         if entries:
                             self.peer_match_index[peer] = next_index + len(entries) - 1
                             self.peer_next_index[peer] = self.peer_match_index[peer] + 1
-                            logger.info(f"{self.node_id}: Updated match_index for {peer} to {self.peer_match_index[peer]}")
+                            logger.info(f"{self.local_node}: Updated match_index for {peer} to {self.peer_match_index[peer]}")
                     else:
                         self.peer_next_index[peer] = max(0, self.peer_next_index[peer] - 1)
                         logger.warning(
-                            f"{self.node_id}: AppendEntries failed for {peer}, backtracking next_index to {self.peer_next_index[peer]}")
+                            f"{self.local_node}: AppendEntries failed for {peer}, backtracking next_index to {self.peer_next_index[peer]}")
                 else:
-                    logger.warning(f"{self.node_id}: AppendEntries to {peer} failed with status {response.status_code}")
+                    logger.warning(f"{self.local_node}: AppendEntries to {peer} failed with status {response.status_code}")
             except Exception as e:
-                logger.warning(f"{self.node_id}: Failed to contact {peer}: {e}")
+                logger.warning(f"{self.local_node}: Failed to contact {peer}: {e}")
 
         # Update leader commit index if the majority of nodes have been updated
         match_indexes = list(self.peer_match_index.values()) + [len(self.log) - 1]  # include leader itself
@@ -219,7 +256,7 @@ class RaftNode:
         # Only advance commit_index for entries from the current term
         if majority_index > self.commit_index and self.log[majority_index]['term'] == self.current_term:
             self.commit_index = majority_index
-            logger.info(f"{self.node_id}: Advanced commit_index to {self.commit_index}")
+            logger.info(f"{self.local_node}: Advanced commit_index to {self.commit_index}")
 
         self.election_timeout = self._reset_election_timeout()
 
@@ -233,7 +270,7 @@ class RaftNode:
             success = False
             if term >= self.current_term:
                 if self.current_term != term:
-                    logger.info(f"{self.node_id}: Updating to new term {term} from leader {leader_id}")
+                    logger.info(f"{self.local_node}: Updating to new term {term} from leader {leader_id}")
                 self.current_term = term
                 self.role = RaftRole.FOLLOWER
                 self.voted_for = None
@@ -256,11 +293,11 @@ class RaftNode:
                     if leader_commit > self.commit_index:
                         self.commit_index = min(leader_commit, len(self.log) - 1)
                     success = True
-                    logger.debug(f"{self.node_id}: AppendEntries successful from leader {leader_id}")
+                    logger.debug(f"{self.local_node}: AppendEntries successful from leader {leader_id}")
                 else:
-                    logger.debug(f"{self.node_id}: AppendEntries log mismatch from leader {leader_id}")
+                    logger.debug(f"{self.local_node}: AppendEntries log mismatch from leader {leader_id}")
             else:
-                logger.debug(f"{self.node_id}: Rejected AppendEntries from {leader_id} due to stale term")
+                logger.debug(f"{self.local_node}: Rejected AppendEntries from {leader_id} due to stale term")
 
             # Return if appending the entry was successful or not
             return {
@@ -276,7 +313,7 @@ class RaftNode:
             entry = {"term": self.current_term, "command": command}
             self.log.append(entry)
             index = len(self.log) - 1
-            logger.info(f"{self.node_id}: Appended new entry at index {index}: {entry}")
+            logger.info(f"{self.local_node}: Appended new entry at index {index}: {entry}")
 
     def get_latest_config(self) -> ClusterConfig:
         with self.lock:
@@ -305,7 +342,7 @@ class RaftNode:
 
                     # Sanity check to avoid index error
                     if latest_index >= len(self.log):
-                        logger.warning(f"{self.node_id}: Commit index {latest_index} exceeds log length {len(self.log)} skipping apply")
+                        logger.warning(f"{self.local_node}: Commit index {latest_index} exceeds log length {len(self.log)} skipping apply")
                         continue
 
                     entry = self.log[latest_index]
@@ -317,18 +354,18 @@ class RaftNode:
         cmd_type = cmd.get("type")
         cmd_data = cmd.get("data")
 
-        logger.info(f"{self.node_id}: Applying log entry at index {self.commit_index}: {cmd_type}")
+        logger.info(f"{self.local_node}: Applying log entry at index {self.commit_index}: {cmd_type}")
 
         if cmd_type == "CONFIG_UPDATE":
             if not self.system:
-                logger.warning(f"{self.node_id}: CONFIG_UPDATE committed but no NodeSystem bound; skipping")
+                logger.warning(f"{self.local_node}: CONFIG_UPDATE committed but no NodeSystem bound; skipping")
                 return
 
             try:
                 self.system.update_config(cmd_data)
-                logger.info(f"{self.node_id}: CONFIG_UPDATE applied")
+                logger.info(f"{self.local_node}: CONFIG_UPDATE applied")
             except Exception:
-                logger.exception(f"{self.node_id}: CONFIG_UPDATE apply failed")
+                logger.exception(f"{self.local_node}: CONFIG_UPDATE apply failed")
 
 
     def _run(self):
@@ -338,27 +375,27 @@ class RaftNode:
                 now = time.time()
 
                 if self.role == RaftRole.LEADER:
-                    logger.debug(f"{self.node_id}: Running as leader in term {self.current_term}")
+                    logger.debug(f"{self.local_node}: Running as leader in term {self.current_term}")
                     self._send_heartbeats()
                 elif now >= self.election_timeout:
-                    logger.info(f"{self.node_id}: Election timeout reached, starting election")
+                    logger.info(f"{self.local_node}: Election timeout reached, starting election")
                     self._start_election()
 
     def start(self):
         with self.lock:
             if not self.running:
                 self.running = True
-                self.thread = threading.Thread(target=self._run, name=f"raft-{self.node_id}", daemon=True)
+                self.thread = threading.Thread(target=self._run, name=f"raft-{self.local_node}", daemon=True)
                 self.thread.start()
 
                 self.applier_thread = threading.Thread(
                     target=self._apply_committed_entries,
-                    name=f"raft-applier-{self.node_id}",
+                    name=f"raft-applier-{self.local_node}",
                     daemon=True
                 )
                 self.applier_thread.start()
 
-                logger.info(f"{self.node_id}: Raft node started")
+                logger.info(f"{self.local_node}: Raft node started")
 
     def stop(self):
         with self.lock:
