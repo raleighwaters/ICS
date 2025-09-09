@@ -10,6 +10,11 @@ class ResourceDesiredState(str, Enum):
     OFFLINE = "offline"
 
 
+class GroupDesiredState(str, Enum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+
+
 # ----- Group models -----
 
 class GroupAttributes(BaseModel):
@@ -47,7 +52,6 @@ class ResourceAttributes(BaseModel):
 class ResourceSpec(BaseModel):
     name: str
     group: str
-    desired_state: ResourceDesiredState = ResourceDesiredState.OFFLINE
     attributes: ResourceAttributes = ResourceAttributes()
     dependsOn: Optional[List[str]] = []
 
@@ -74,4 +78,8 @@ class AppendEntriesRequest(BaseModel):
 
 class ResourceStateUpdate(BaseModel):
     state: ResourceDesiredState
-    node: str
+    node: Optional[str] = ""
+
+
+class GroupStateUpdate(BaseModel):
+    state: GroupDesiredState
