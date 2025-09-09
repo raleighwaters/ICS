@@ -1,5 +1,5 @@
 import logging
-import os
+import socket
 import yaml
 from typing import List, Optional
 from pathlib import Path
@@ -20,7 +20,7 @@ class ICSSettings(BaseSettings):
         extra="ignore",
     )
 
-    hostname: str = Field(default_factory=lambda: os.uname()[1])
+    hostname: str = Field(default_factory=lambda: socket.gethostname())
 
     var_dir: Path = Field("/var/opt/ics")
     log_dir: Path = Field("/var/opt/ics/log")
