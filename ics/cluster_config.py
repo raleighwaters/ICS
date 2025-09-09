@@ -2,7 +2,7 @@ import logging
 from pydantic import BaseModel, Field
 from typing import Dict
 
-from ics.models import GroupSpec, ResourceSpec, ResourceDesiredState
+from ics.models import GroupSpec, ResourceSpec
 from ics.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -74,16 +74,6 @@ class ClusterConfig(BaseModel):
         del self.resources[resource_name]
         logger.info(f"Resource '{resource_name}' deleted")
 
-    def res_online(self, resource_name: str):
-        self._ensure_resource_exists(resource_name)
-        self.resources[resource_name].desired_state = ResourceDesiredState.ONLINE
-        logger.info(f"Resource '{resource_name}' set to ONLINE")
-
-    def res_offline(self, resource_name: str):
-        self._ensure_resource_exists(resource_name)
-        self.resources[resource_name].desired_state = ResourceDesiredState.OFFLINE
-        logger.info(f"Resource '{resource_name}' set to OFFLINE")
-
     def res_attr(self, resource_name: str):
         self._ensure_resource_exists(resource_name)
         logger.debug(self.resources[resource_name])
@@ -101,21 +91,6 @@ class ClusterConfig(BaseModel):
 
         # Use model_copy to return a new instance with updates
         resource.attributes = resource.attributes.model_copy(update=updates)
-
-
-    def grp_online(self, group_name: str):
-        self._ensure_group_exists(group_name)
-        for res_config in self.resources.values():
-            if res_config.group == group_name:
-                res_config.desired_state = ResourceDesiredState.ONLINE
-                logger.info(f"Resource '{res_config.name}' in group '{group_name}' set to ONLINE")
-
-    def grp_offline(self, group_name: str):
-        self._ensure_group_exists(group_name)
-        for res_config in self.resources.values():
-            if res_config.group == group_name:
-                res_config.desired_state = ResourceDesiredState.OFFLINE
-                logger.info(f"Resource '{res_config.name}' in group '{group_name}' set to OFFLINE")
 
     def res_dependency(self, resource_name: str):
         self._ensure_resource_exists(resource_name)
