@@ -62,6 +62,8 @@ class RaftNode:
 
         self.system = system
 
+        self.leader_id = None
+
         # Raft persistent state
         self.current_term = 0
         self.voted_for: Optional[Node] = None
@@ -127,6 +129,20 @@ class RaftNode:
             return True
         else:
             return False
+
+    def get_leader_node(self) -> Optional[Node]:
+        with self.lock:
+            # If this node is the leader, return its own details
+            if self.is_leader():
+                return self.local_node
+
+            # If a leader has been updated by AppendEntries RPC, fetch it
+            if self.leader_id:
+                for peer in self.peers:
+                    if peer.node_id == self.leader_id:
+                        return peer
+
+        return None
 
     def _reset_election_timeout(self) -> float:
         timeout = random.uniform(5.0, 9.0)
@@ -291,6 +307,9 @@ class RaftNode:
 
             entries_length = len(entries)
             logger.debug(f"Received {entries_length} new entries from leader {leader_id}")
+
+            if leader_id:
+                self.leader_id = leader_id
 
             success = False
             if term >= self.current_term:
