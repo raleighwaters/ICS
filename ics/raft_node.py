@@ -90,6 +90,25 @@ class RaftNode:
         """Returns a list of all node IDs in the cluster, including self."""
         return self.peers + [self.local_node]
 
+    def get_node(self, hostname: str):
+        """
+        Retrieve a Node by its hostname.
+
+        Args:
+            hostname (str): The hostname to search for.
+
+        Raises:
+            NodeNotFoundError: If no Node is found with the given hostname.
+
+        Returns:
+            Node: The Node object with the given hostname.
+        """
+        for node in self.nodes():
+            if node.hostname == hostname:
+                return node
+
+        raise ValueError(f"Node with hostname '{hostname}' not found.")
+
     def get_status(self):
         with self.lock:
             return {
