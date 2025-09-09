@@ -18,11 +18,46 @@ def check_resource(name, system):
         logger.error(f"Resource {name} not found in system")
         raise HTTPException(status_code=404, detail=f"Resource {name} not found")
 
+
 def check_group(name, system):
     try:
         system.get_group(name)
     except ics.errors.ICSError:
         raise HTTPException(status_code=404, detail=f"Group {name} not found")
+
+async def forward_request_to_leader(raft_node, request: Request):
+
+    leader_node = raft_node.get_leader_node()
+    if not leader_node:
+        raise HTTPException(status_code=503, detail="Leader node unavailable")
+
+    leader_url = f"http://{leader_node.hostname}:{leader_node.port}"
+
+    # Construct the full URL to the leader
+    url = f"{leader_url}{request.url.path}"
+    if request.url.query:
+        url += f"?{request.url.query}"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # Forward method, headers, body
+            resp = await client.request(
+                method=request.method,
+                url=url,
+                headers=request.headers.raw,  # Pass raw headers
+                content=await request.body()
+            )
+
+        # Return a FastAPI-compatible Response with status and content
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            headers=dict(resp.headers),
+            media_type=resp.headers.get("content-type")
+        )
+
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Leader unreachable: {e}")
 
 
 def create_api(raft_node, system):
@@ -100,7 +135,10 @@ def create_api(raft_node, system):
         return {"resources": list(config.resources.keys())}
 
     @app.post("/resources")
-    async def add_resource(resource: ResourceSpec):
+    async def add_resource(request: Request, resource: ResourceSpec):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
         def mutator(config: ClusterConfig):
             config.add_resource(resource)
         mutate_config(mutator)
@@ -114,7 +152,10 @@ def create_api(raft_node, system):
         return {"data": data}
 
     @app.delete("/resources/{name}")
-    async def delete_resource(name: str):
+    async def delete_resource(request: Request, name: str):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
         def mutator(config: ClusterConfig):
             config.delete_resource(name)
         mutate_config(mutator)
@@ -148,7 +189,10 @@ def create_api(raft_node, system):
         return {"data": dependencies}
 
     @app.put("/resources/{name}/dependency/{dep_name}")
-    async def add_resource_dependency(name: str, dep_name: str):
+    async def add_resource_dependency(request: Request, name: str, dep_name: str):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
         check_resource(name, system)
         check_resource(dep_name, system)
 
@@ -162,7 +206,10 @@ def create_api(raft_node, system):
         return {"status": "added", "resource": name, "dependency": dep_name}
 
     @app.delete("/resources/{name}/dependency/{dep_name}")
-    async def remove_resource_dependency(name: str, dep_name: str):
+    async def remove_resource_dependency(request: Request, name: str, dep_name: str):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
         check_resource(name, system)
 
         def mutator(config: ClusterConfig):
@@ -185,7 +232,10 @@ def create_api(raft_node, system):
         return await cluster_resource_probe(raft_node, system, name)
 
     @app.patch("/resources/{name}/attributes")
-    async def modify_resources_attributes(name: str, updates: dict):
+    async def modify_resources_attributes(request: Request, name: str, updates: dict):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
         check_resource(name, system)
 
         def mutator(config: ClusterConfig):
@@ -205,14 +255,20 @@ def create_api(raft_node, system):
         return {"groups": list(config.groups.keys())}
 
     @app.post("/groups")
-    async def add_group(group: GroupSpec):
+    async def add_group(request: Request, group: GroupSpec):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
         def mutator(config: ClusterConfig):
             config.add_group(group)
         mutate_config(mutator)
         return {"status": "added", "name": group.name}
 
     @app.delete("/groups/{name}")
-    async def delete_group(name: str):
+    async def delete_group(request: Request, name: str):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
         def mutator(config: ClusterConfig):
             config.delete_group(name)
         mutate_config(mutator)
@@ -253,7 +309,6 @@ def create_api(raft_node, system):
         check_resource(name, system)
         system.res_clear(name)
         return {"status": "success"}
-
 
     @app.get("/local/resources/{name}/probe")
     async def local_resource_probe(name: str):
