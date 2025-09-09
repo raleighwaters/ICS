@@ -33,7 +33,7 @@ class ICSSettings(BaseSettings):
     api_port: int = Field(5000)
 
     alert_recipients: Optional[List[str]] = None
-    peers: Optional[List[str]] = None
+    peers: Optional[List[str]] = Field(default_factory=list)
     alert_level: str = Field("NOTSET")
 
     group_limit: int = Field(200)
