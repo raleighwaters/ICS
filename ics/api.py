@@ -5,11 +5,11 @@ import httpx
 
 import ics.errors
 from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest, ResourceDesiredState, \
-    GroupDesiredState, GroupStateUpdate
+    GroupDesiredState, GroupStateUpdate, GroupStateAction
 from ics.models import ResourceStateUpdate
 from ics.raft_node import Node
 from ics.cluster_config import ClusterConfig
-from ics.cluster_actions import cluster_group_state_change
+from ics.cluster_actions import cluster_group_states, cluster_group_state_change, cluster_group_action
 
 from ics.cluster_actions import cluster_resource_states, cluster_resource_probe, cluster_resource_state, cluster_resource_clear, cluster_resource_state_change
 
@@ -168,7 +168,16 @@ def create_api(raft_node, system):
     @app.put("/groups/{name}/state")
     async def change_group_state(name, state_update=GroupStateUpdate):
         check_group(name, system)
-        return await cluster_group_state_change(raft_node, system, name, state_update.node, state_update.state)
+        action = state_update.action
+        if action == GroupStateAction.ONLINE:
+            return await cluster_group_state_change(raft_node, system, name, GroupDesiredState.ONLINE, node_name=state_update.node)
+        elif action == GroupStateAction.OFFLINE:
+            return await cluster_group_state_change(raft_node, system, name, GroupDesiredState.OFFLINE, node_name=state_update.node)
+        elif action in [GroupStateAction.CLEAR, GroupStateAction.FLUSH]:
+            return await cluster_group_action(raft_node, system, name, state_update.node, action)
+        else:
+            # This should never happen, but just in case
+            raise HTTPException(status_code=400, detail=f"Unknown action {action}")
 
     @app.patch("/groups/{name}/attributes")
     async def modify_group_attributes(request: Request, name: str, updates: dict):
@@ -304,7 +313,7 @@ def create_api(raft_node, system):
 
     @app.get("/state/groups")
     async def state_groups():
-        pass
+        return await cluster_group_states(raft_node, system)
 
     @app.get("/state/resources")
     async def state_resources():
@@ -335,6 +344,22 @@ def create_api(raft_node, system):
         return {"status": "success"}
 
     # -------- Local Groups --------
+
+    @app.put("/local/groups/{name}/state")
+    async def local_change_group_state(name: str, state_update: GroupStateUpdate):
+        check_resource(name, system)
+        action = state_update.action
+        if action == GroupStateAction.ONLINE:
+            system.group_online(name)
+        elif action == GroupStateAction.OFFLINE:
+            system.group_offline(name)
+        elif action == GroupStateAction.CLEAR:
+            system.group_clear(name)
+        elif action == GroupStateAction.FLUSH:
+            system.group_flush(name)
+        else:
+            # This should never happen, but just in case
+            raise HTTPException(status_code=400, detail=f"{action}")
 
     # -------- Local States --------
 
