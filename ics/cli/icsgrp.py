@@ -1,79 +1,170 @@
 import argparse
+import time
+
 import requests
 import sys
 
-from ics.cli.common import API_BASE, epilog_text, print_table
+from ics.cli.common import API_BASE, epilog_text, print_table, check_response
+from icsres import res_modify
+
+def grp_online(name: str, node=None):
+    payload = {"action": "online"}
+    if node is not None:
+        payload["node"] = node
+
+    response = requests.put(f"{API_BASE}/groups/{name}/state", json=payload)
+    check_response(response)
 
 
+def grp_offline(name: str, node=None):
+    payload = {"action": "offline"}
+    if node is not None:
+        payload["node"] = node
 
-def grp_online(name, node):
-    pass
-
-
-def grp_offline():
-    pass
-
-
-def grp_add():
-    pass
+    response = requests.put(f"{API_BASE}/groups/{name}/state", json=payload)
+    check_response(response)
 
 
-def grp_delete():
-    pass
+def grp_add(name: str):
+    response = requests.post(f"{API_BASE}/groups", json={"name": name})
+    check_response(response)
 
 
-def grp_enable():
-    pass
+def grp_delete(name: str):
+    response = requests.delete(f"{API_BASE}/groups/{name}")
+    check_response(response)
+
+def grp_enable(name: str):
+    response = requests.patch(f"{API_BASE}/groups/{name}/attributes", json={"enabled": "true"})
+    check_response(response)
 
 
-def grp_disable():
-    pass
+def grp_disable(name: str):
+    response = requests.patch(f"{API_BASE}/groups/{name}/attributes", json={"enabled": "false"})
+    check_response(response)
 
 
-def grp_enable_resources():
-    pass
+def grp_enable_resources(name: str):
+    response = requests.get(f"{API_BASE}/groups/{name}/resources")
+    check_response(response)
+    resource_names = [resource["name"] for resource in response.json()["data"]]
+    for resource_name in resource_names:
+        res_modify(resource_name, "enabled", "true")
 
 
-def grp_disable_resources():
-    pass
+def grp_disable_resources(name: str):
+    response = requests.get(f"{API_BASE}/groups/{name}/resources")
+    check_response(response)
+    resource_names = [resource["name"] for resource in response.json()["data"]]
+    for resource_name in resource_names:
+        res_modify(resource_name, "enabled", "false")
 
 
-def grp_state():
-    pass
+def grp_state(name: str):
+    response = requests.get(f"{API_BASE}/groups/{name}/state")
+    check_response(response)
+    group_states = response.json()["data"]
+    table = []
+    for state in group_states.items():
+        table.append((name,) + state)
+
+    print_table(table)
 
 
 def grp_state_all():
-    pass
+    response =  requests.get(f"{API_BASE}/state/groups")
+    check_response(response)
+    try:
+        json_data = response.json()["data"]
+    except TypeError:
+        print("ERROR: ")
+        sys.exit(1)
+
+    table = []
+    for group_name, node_map in json_data.items():
+        for node_name, state in node_map.items():
+            table.append((group_name, node_name, state))
+
+    print_table(table)
 
 
-def grp_clear():
-    pass
+def grp_clear(name: str, node: str):
+    response = requests.get(f"{API_BASE}/groups/{name}/state", json={"action": "clear"})
+    check_response(response)
 
 
-def grp_flush():
-    pass
+def grp_flush(name: str, node: str):
+    response = requests.get(f"{API_BASE}/groups/{name}/state", json={"action": "flush"})
+    check_response(response)
 
 
-def grp_resources():
-    pass
+def grp_resources(name: str):
+    response = requests.get(f"{API_BASE}/groups/{name}/resources")
+    check_response(response)
+    resource_names = [resource["name"] for resource in response.json()["data"]]
+    resource_names.sort()
+    for resource_name in resource_names:
+        print(resource_name)
 
 
 def grp_list():
-    pass
+    response = requests.get(f"{API_BASE}/groups")
+    check_response(response)
+    for group in response.json()["data"]["groups"]:
+        print(group)
 
 
-def grp_attr():
-    pass
+def grp_attr(name: str):
+    response = requests.get(f"{API_BASE}/groups/{name}")
+    check_response(response)
+    json_data = response.json()["data"]["attributes"]
+    table = [(attribute, value) for attribute, value in json_data.items()]
+    print_table(table)
 
 
-def grp_value():
-    pass
+def grp_value(name: str, attribute: str):
+    response = requests.get(f"{API_BASE}/groups/{name}")
+    check_response(response)
+    json_data = response.json()["data"]["attributes"]
+    try:
+        attribute_value = json_data[attribute]
+    except KeyError:
+        print(f"ERROR: Invalid attribute name '{attribute}'")
+        sys.exit(1)
+
+    print(attribute_value)
 
 
-def grp_modify():
-    pass
+def grp_modify(name: str, attribute: str, value: str):
+    response = requests.patch(f"{API_BASE}/groups/{name}/attributes", json={attribute: value})
+    check_response(response)
 
 
+def grp_wait(name: str, state: str, timeout=None, node=None):
+    if timeout is not None:
+        timer = int(timeout)
+    else:
+        timer = -1  # Negative timer means no countdown, wait forever
+
+    while timer != 0:
+        response = requests.get(f"{API_BASE}/groups/{name}/state")
+        check_response(response)
+        group_states = response.json()["data"]
+
+        if node is not None:
+            if group_states[node]["state"] == state:
+                sys.exit(0)
+
+        else:
+            if state in group_states.values():
+                sys.exit(0)
+
+
+
+        time.sleep(1)
+        timer -= 1
+
+    sys.exit(1)
 
 
 def main():
@@ -158,20 +249,11 @@ def main():
 
     elif args.state is not None:
         group_list = args.state  # List of provided group names
-        if len(group_list) == 0:
-            results = grp_state_all()
-            print_table(results)
-        elif len(group_list) == 1:
+        if len(group_list) == 1:
             group_name = group_list[0]
-            group_states = grp_state(group_name)
-            table = []
-            for state in group_states.items():
-                table.append((group_name,) + state)
-
-            print_table(table)
+            grp_state(group_name)
         else:
-            results = grp_state_all(group_names=group_list)
-            print_table(results)
+            grp_state_all()
 
     elif args.clear is not None:
         group_name = args.clear[0]
@@ -185,26 +267,19 @@ def main():
 
     elif args.resources is not None:
         group_name = args.resources[0]
-        result = grp_resources(group_name)
-        result.sort()
-        for group_name in result:
-            print(group_name)
+        grp_resources(group_name)
 
     elif args.list is True:
-        groups = grp_list()
-        for group_name in groups:
-            print(group_name)
+        grp_list()
 
     elif args.attr is not None:
         group_name = args.attr[0]
-        result = grp_attr(group_name)
-        print_table(result)
+        grp_attr(group_name)
 
     elif args.value is not None:
         group_name = args.value[0]
         attr = args.value[1]
-        result = grp_value(group_name, attr)
-        print(result)
+        grp_value(group_name, attr)
 
     elif args.modify is not None:
         if len(args.modify) == 2:
@@ -239,42 +314,19 @@ def main():
             node = secondary_args.sys[0]
 
         if secondary_args.timeout is not None:
-            try:
-                timer = int(secondary_args.timeout[0])
-            except ValueError:
-                print('ERROR: Timeout parameter invalid.')
-                sys.exit(1)
+            timeout = secondary_args.timeout[0]
         else:
-            timer = -1  # Negative timer means no countdown
+            timeout = None
 
-        while timer != 0:
-            group_states = grp_state(group_name, valid_nodes=True)
-
-            if node is not None:
-                if group_states[node] == state_name:
-                    sys.exit(0)
-            elif secondary_args.all:
-                states = group_states.values()
-                if list(set(states)) == [state_name]:
-                    sys.exit(0)
-            else:
-                if state_name in group_states.values():
-                    sys.exit(0)
-
-            time.sleep(1)
-            timer -= 1
-
-        sys.exit(1)  # Exit with return code 1 when timeout is reached
+        grp_wait(group_name, state_name, node=node, timeout=timeout)
 
     else:
         parser.print_help()
 
 
-
-
-
-
-
 if __name__ == "__main__":
-    main()
-
+    try:
+        main()
+    except requests.exceptions.ConnectionError as err:
+        print("ERROR: Unable to connect to the ICS server")
+        sys.exit(1)
