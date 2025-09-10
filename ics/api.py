@@ -166,7 +166,7 @@ def create_api(raft_node, system):
         return {"status": "deleted", "name": name}
 
     @app.put("/groups/{name}/state")
-    async def change_group_state(name, state_update=GroupStateUpdate):
+    async def change_group_state(name, state_update: GroupStateUpdate):
         check_group(name, system)
         action = state_update.action
         if action == GroupStateAction.ONLINE:
