@@ -382,16 +382,16 @@ class NodeSystem(AttributeObject):
     #                     self.remote_nodes[valid_node].grp_online(group_name)
 
     # @Pyro.expose
-    # def grp_online(self, group_name):
-    #     """Interface for bringing a group online.
-    #
-    #     Args:
-    #         group_name (str): Group name.
-    #
-    #     """
-    #     logger.info('Group({}) bringing online'.format(group_name))
-    #     group = self.get_group(group_name)
-    #     group.start()
+    def grp_online(self, group_name):
+        """Interface for bringing a group online.
+
+        Args:
+            group_name (str): Group name.
+
+        """
+        logger.info('Group({}) bringing online'.format(group_name))
+        group = self.get_group(group_name)
+        group.start()
 
     def grp_online_auto(self):
         """Start all groups with the attribute AutoStart set to true."""
@@ -418,16 +418,16 @@ class NodeSystem(AttributeObject):
     #         self.remote_nodes[node].grp_offline(group_name)
 
     # @Pyro.expose
-    # def grp_offline(self, group_name):
-    #     """Interface for bringing a group offline.
-    #
-    #     Args:
-    #         group_name (str): Group name.
-    #
-    #     """
-    #     logger.info('Group({}) bringing offline'.format(group_name))
-    #     group = self.get_group(group_name)
-    #     group.stop()
+    def grp_offline(self, group_name):
+        """Interface for bringing a group offline.
+
+        Args:
+            group_name (str): Group name.
+
+        """
+        logger.info('Group({}) bringing offline'.format(group_name))
+        group = self.get_group(group_name)
+        group.stop()
 
     # @Pyro.expose
     # def clus_grp_state(self, group_name, valid_nodes=False):
