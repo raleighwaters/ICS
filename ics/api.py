@@ -170,6 +170,22 @@ def create_api(raft_node, system):
         check_group(name, system)
         return await cluster_group_state_change(raft_node, system, name, state_update.node, state_update.state)
 
+    @app.patch("/groups/{name}/attributes")
+    async def modify_group_attributes(request: Request, name: str, updates: dict):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
+        check_group(name, system)
+
+        def mutator(config: ClusterConfig):
+            try:
+                config.grp_attr_update(name, updates)
+            except ValueError as err:
+                raise HTTPException(status_code=400, detail=str(err))
+
+        mutate_config(mutator)
+        return {"status": "updated"}
+
     # -------- Resources --------
 
     @app.get("/resources")
