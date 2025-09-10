@@ -148,6 +148,13 @@ def create_api(raft_node, system):
         mutate_config(mutator)
         return {"status": "added", "name": group.name}
 
+    @app.get("/groups/{name}")
+    async def get_group(name: str):
+        check_group(name, system)
+        config = raft_node.get_latest_config()
+        data = config.group(name)
+        return {"data": data}
+
     @app.delete("/groups/{name}")
     async def delete_group(request: Request, name: str):
         if not raft_node.is_leader():
