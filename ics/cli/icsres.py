@@ -6,13 +6,13 @@ import time
 from ics.cli.common import API_BASE, epilog_text, check_response, print_table
 
 
-def res_online(name: str, system: str):
-    response = requests.put(f"{API_BASE}/resources/{name}/state", json={"state": "online", "node": system})
+def res_online(name: str, node: str):
+    response = requests.put(f"{API_BASE}/resources/{name}/state", json={"state": "online", "node": node})
     check_response(response)
 
 
-def res_offline(name: str, system: str):
-    response = requests.put(f"{API_BASE}/resources/{name}/state", json={"state": "offline", "node": system})
+def res_offline(name: str, node: str):
+    response = requests.put(f"{API_BASE}/resources/{name}/state", json={"state": "offline", "node": node})
     check_response(response)
 
 
