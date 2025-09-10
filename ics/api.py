@@ -340,7 +340,11 @@ def create_api(raft_node, system):
 
     @app.get("/local/state/groups")
     async def state_groups_local():
-        pass
+        config = raft_node.get_latest_config()
+        groups = config.group_names()
+        return {
+            "data": { name: system.grp_state(name) for name in groups }
+        }
 
     @app.get("/local/state/resources")
     async def state_resources_local():
