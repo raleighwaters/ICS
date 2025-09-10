@@ -84,7 +84,7 @@ class ClusterConfig(BaseModel):
             elif key in resource.model_fields:
                 setattr(resource, key, value)
             else:
-                raise ValueError(f"Unknown field '{key}' in resource update")
+                raise ValueError(f"Unknown field '{key}' in resource attribute update")
 
     def delete_resource(self, resource_name: str):
         self._ensure_resource_exists(resource_name)
