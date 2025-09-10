@@ -347,19 +347,21 @@ def create_api(raft_node, system):
 
     @app.put("/local/groups/{name}/state")
     async def local_change_group_state(name: str, state_update: GroupStateUpdate):
-        check_resource(name, system)
+        check_group(name, system)
         action = state_update.action
         if action == GroupStateAction.ONLINE:
-            system.group_online(name)
+            system.grp_online(name)
         elif action == GroupStateAction.OFFLINE:
-            system.group_offline(name)
+            system.grp_offline(name)
         elif action == GroupStateAction.CLEAR:
-            system.group_clear(name)
+            system.grp_clear(name)
         elif action == GroupStateAction.FLUSH:
-            system.group_flush(name)
+            system.grp_flush(name)
         else:
             # This should never happen, but just in case
             raise HTTPException(status_code=400, detail=f"{action}")
+        return {"status": "success"}
+
 
     # -------- Local States --------
 
