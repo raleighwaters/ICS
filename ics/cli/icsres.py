@@ -110,7 +110,7 @@ def res_value(name: str, attribute: str):
         attribute_value = json_data[attribute]
     except KeyError:
         print(f"ERROR: Invalid attribute name '{attribute}'")
-        sys.exit()
+        sys.exit(1)
 
     print(attribute_value)
 
