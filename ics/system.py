@@ -1088,6 +1088,7 @@ class NodeSystem(AttributeObject):
         resource_states = []
         node_name = self.attr_value('NodeName')
 
+        # Gather the list of resource objects
         if names:
             resources = []
             for resource_name in names:
