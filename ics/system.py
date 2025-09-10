@@ -457,48 +457,47 @@ class NodeSystem(AttributeObject):
     #
     #     return states
 
-    # @Pyro.expose
-    # def clus_grp_state_all(self, group_names=None, include_local=True):
-    #     """Get all group states from all nodes in the cluster.
-    #
-    #     Args:
-    #         group_names (list): Limit the group name list for a given list of groups.
-    #         include_local (bool): Toggle whether local node is included in group states.
-    #
-    #     Returns:
-    #         list: List of tuples with the format of (group name, node name, group state).
-    #     """
-    #     group_states = []
-    #     if group_names is None:
-    #         group_names = self.groups.keys()
-    #
-    #     local_node = self.attr_value('NodeName')
-    #
-    #     for group_name in group_names:
-    #
-    #         if include_local:
-    #             group_states.append((group_name, local_node, self.grp_state(group_name)))
-    #
-    #         for node in self.remote_nodes:
-    #             state = self.remote_nodes[node].grp_state(group_name)
-    #             logger.debug("Found group {} in state {} on node {}".format(group_name, state, node))
-    #             group_states.append((group_name, node, state))
-    #
-    #     return group_states
+    def grp_state_many(self, names=None, include_node=False):
+        """Get all group states from all nodes in the cluster.
 
-    # @Pyro.expose
-    # def grp_state(self, group_name):
-    #     """Interface for getting state of group.
-    #
-    #     Args:
-    #         group_name (str): Name of group.
-    #
-    #     Returns:
-    #         str: Group state.
-    #
-    #     """
-    #     group = self.get_group(group_name)
-    #     return group.state().upper()
+        Args:
+            names (list): Limit the group name list for a given list of groups.
+            include_local (bool): Toggle whether local node is included in group states.
+
+        Returns:
+            list: List of tuples with the format of (group name, node name, group state).
+        """
+        group_states = []
+        node_name = self.attr_value('NodeName')
+
+        # Gather the list of group objects
+        if names:
+            groups = []
+            for group_name in names:
+                groups.append(self.get_group(group_name))
+        else:
+            groups = self.groups.values()
+
+        for group in groups:
+            if include_node:
+                group_states.append([group.name, node_name, group.state().upper()])
+            else:
+                group_states.append([group.name, group.state().upper()])
+
+        return group_states
+
+    def grp_state(self, group_name):
+        """Interface for getting state of group.
+
+        Args:
+            group_name (str): Name of group.
+
+        Returns:
+            str: Group state.
+
+        """
+        group = self.get_group(group_name)
+        return group.state().upper()
 
     # @Pyro.expose
     # def clus_grp_add(self, group_name, remote=False):
