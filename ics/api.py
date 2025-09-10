@@ -131,6 +131,38 @@ def create_api(raft_node, system):
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    # -------- Groups --------
+
+    @app.get("/groups")
+    async def list_groups():
+        config = raft_node.get_latest_config()
+        return {"groups": list(config.groups.keys())}
+
+    @app.post("/groups")
+    async def add_group(request: Request, group: GroupSpec):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
+        def mutator(config: ClusterConfig):
+            config.add_group(group)
+        mutate_config(mutator)
+        return {"status": "added", "name": group.name}
+
+    @app.delete("/groups/{name}")
+    async def delete_group(request: Request, name: str):
+        if not raft_node.is_leader():
+            return await forward_request_to_leader(raft_node, request)
+
+        def mutator(config: ClusterConfig):
+            config.delete_group(name)
+        mutate_config(mutator)
+        return {"status": "deleted", "name": name}
+
+    @app.put("/groups/{name}/state")
+    async def change_group_state(name, state_update=GroupStateUpdate):
+        check_group(name, system)
+        return await cluster_group_state_change(raft_node, system, name, state_update.node, state_update.state)
+
     # -------- Resources --------
 
     @app.get("/resources")
@@ -240,38 +272,6 @@ def create_api(raft_node, system):
 
         mutate_config(mutator)
         return {"status": "updated"}
-
-    # -------- Groups --------
-
-    @app.get("/groups")
-    async def list_groups():
-        config = raft_node.get_latest_config()
-        return {"groups": list(config.groups.keys())}
-
-    @app.post("/groups")
-    async def add_group(request: Request, group: GroupSpec):
-        if not raft_node.is_leader():
-            return await forward_request_to_leader(raft_node, request)
-
-        def mutator(config: ClusterConfig):
-            config.add_group(group)
-        mutate_config(mutator)
-        return {"status": "added", "name": group.name}
-
-    @app.delete("/groups/{name}")
-    async def delete_group(request: Request, name: str):
-        if not raft_node.is_leader():
-            return await forward_request_to_leader(raft_node, request)
-
-        def mutator(config: ClusterConfig):
-            config.delete_group(name)
-        mutate_config(mutator)
-        return {"status": "deleted", "name": name}
-
-    @app.put("/groups/{name}/state")
-    async def change_group_state(name, state_update=GroupStateUpdate):
-        check_group(name, system)
-        return await cluster_group_state_change(raft_node, system, name, state_update.node, state_update.state)
 
     # -------- State --------
 
