@@ -136,7 +136,7 @@ def create_api(raft_node, system):
     @app.get("/groups")
     async def list_groups():
         config = raft_node.get_latest_config()
-        return {"groups": list(config.groups.keys())}
+        return {"data": {"groups": list(config.groups.keys())}}
 
     @app.post("/groups")
     async def add_group(request: Request, group: GroupSpec):
