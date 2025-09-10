@@ -19,8 +19,12 @@ class ClusterConfig(BaseModel):
         if resource_name not in self.resources:
             raise ValueError(f"Resource '{resource_name}' not found")
 
-    def resource_names(self):
-        return self.resources.keys()
+    def group_names(self):
+        return self.groups.keys()
+
+    def group(self, name):
+        self._ensure_group_exists(name)
+        return self.groups[name].model_dump()
 
     def add_group(self, group: GroupSpec):
         if group.name in self.groups:
@@ -36,6 +40,23 @@ class ClusterConfig(BaseModel):
             raise ValueError(f"Group '{group_name}' is still in use by resources")
         del self.groups[group_name]
         logger.info(f"Group '{group_name}' deleted")
+
+    def grp_attr_update(self, name: str, updates: dict):
+        self._ensure_group_exists(name)
+        group = self.groups[name]
+
+        for key, value in updates.items():
+            if key == "attributes":
+                if not isinstance(value, dict):
+                    raise ValueError("attributes must be a dictionary")
+                group.attributes = group.attributes.model_copy(update=value)
+            elif key in group.model_attrs:
+                setattr(group, key, value)
+            else:
+                raise ValueError(f"Unknown field '{key}' in group attribute update")
+
+    def resource_names(self):
+        return self.resources.keys()
 
     def resource(self, name: str):
         self._ensure_resource_exists(name)
