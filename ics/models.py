@@ -15,6 +15,20 @@ class GroupDesiredState(str, Enum):
     OFFLINE = "offline"
 
 
+class GroupStateAction(str, Enum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    CLEAR = "clear"
+    FLUSH = "flush"
+
+
+class ResourceStateAction(str, Enum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    CLEAR = "clear"
+    PROBE = "probe"
+
+
 # ----- Group models -----
 
 class GroupAttributes(BaseModel):
@@ -82,4 +96,5 @@ class ResourceStateUpdate(BaseModel):
 
 
 class GroupStateUpdate(BaseModel):
-    state: GroupDesiredState
+    action: GroupStateAction
+    node: Optional[str] = ""
