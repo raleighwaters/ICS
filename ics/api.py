@@ -195,6 +195,12 @@ def create_api(raft_node, system):
         mutate_config(mutator)
         return {"status": "updated"}
 
+    @app.get("/groups/{name}/resources")
+    async def get_group_resources(name: str):
+        check_group(name, system)
+        config = raft_node.get_latest_config()
+        return {"data": config.group_resources(name)}
+
     # -------- Resources --------
 
     @app.get("/resources")

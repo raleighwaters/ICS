@@ -55,6 +55,10 @@ class ClusterConfig(BaseModel):
             else:
                 raise ValueError(f"Unknown field '{key}' in group attribute update")
 
+    def group_resources(self, name: str):
+        self._ensure_group_exists(name)
+        return [resource.model_dump() for resource in self.resources.values() if resource.group == name ]
+
     def resource_names(self):
         return self.resources.keys()
 
