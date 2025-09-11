@@ -4,6 +4,7 @@ import random
 import enum
 import logging
 import requests
+import socket
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,11 @@ class RaftRole(enum.Enum):
 
 
 class RaftNode:
+
+    MULTICAST_GROUP = '224.0.0.1'  # Multicast group (change as needed)
+    MULTICAST_PORT = 50000         # Port for discovery
+    DISCOVERY_INTERVAL = 5.0       # Send a presence announcement every 5 seconds
+
     def __init__(self, local_node: Node, peers: List[Node], system: Optional[NodeSystem] = None):
         self.local_node = local_node
         self.peers = peers  # List of remote Nodes
@@ -87,6 +93,9 @@ class RaftNode:
         self.thread: Optional[threading.Thread] = None
 
         self.applier_thread: Optional[threading.Thread] = None
+
+        self.run_discovery = False
+        self.discovery_thread: Optional[threading.Thread] = None
 
     def nodes(self) -> list[Node]:
         """Returns a list of all node IDs in the cluster, including self."""
@@ -425,6 +434,66 @@ class RaftNode:
                     logger.info(f"{self.local_node}: Election timeout reached, starting election")
                     self._start_election()
 
+    def announce_presence(self):
+        """Periodically announces this node's presence via multicast."""
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+            message = self.local_node.node_id.encode("utf-8")
+
+            while self.run_discovery:
+                try:
+                    sock.sendto(message, (self.MULTICAST_GROUP, self.MULTICAST_PORT))
+                    logger.debug(f"{self.local_node}: Announced presence to multicast group {self.MULTICAST_GROUP}")
+                except Exception as e:
+                    logger.error(f"{self.local_node}: Failed to announce presence: {e}")
+                time.sleep(self.DISCOVERY_INTERVAL)
+
+    def listen_for_discovery(self):
+        """Listens for announcements from other nodes and dynamically adds them."""
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("", self.MULTICAST_PORT))
+            group = socket.inet_aton(self.MULTICAST_GROUP)
+            mreq = group + socket.inet_aton("0.0.0.0")
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+            while self.run_discovery:
+                try:
+                    data, _ = sock.recvfrom(1024)
+                    node_id = data.decode("utf-8")
+                    logger.debug(f"Received multicast message: {data}")
+                    discovered_node = Node.from_string(node_id)
+                    if discovered_node != self.local_node:
+                        with self.lock:
+                            if discovered_node not in self.peers:
+                                self.peers.append(discovered_node)
+                                logger.info(f"{self.local_node}: Discovered and added new peer {discovered_node}")
+                except Exception as e:
+                    logger.error(f"{self.local_node}: Failed to process discovery message: {e}")
+
+    def _discovery_loop(self):
+        """Run both announce_presence and listen_for_discovery concurrently."""
+        announce_thread = threading.Thread(target=self.announce_presence, daemon=True)
+        listen_thread = threading.Thread(target=self.listen_for_discovery, daemon=True)
+        announce_thread.start()
+        listen_thread.start()
+        announce_thread.join()
+        listen_thread.join()
+
+    def start_discovery(self):
+        """Starts the node discovery mechanism, both announcing and listening."""
+        self.run_discovery = True
+        self.discovery_thread = threading.Thread(target=self._discovery_loop, daemon=True)
+        self.discovery_thread.start()
+        logger.info(f"{self.local_node}: Started node discovery")
+
+    def stop_discovery(self):
+        """Stops the node discovery mechanism."""
+        self.run_discovery = False
+        if self.discovery_thread:
+            self.discovery_thread.join()
+        logger.info(f"{self.local_node}: Stopped node discovery")
+
     def start(self):
         with self.lock:
             if not self.running:
@@ -439,6 +508,8 @@ class RaftNode:
                 )
                 self.applier_thread.start()
 
+                self.start_discovery()
+
                 logger.info(f"{self.local_node}: Raft node started")
 
     def stop(self):
@@ -448,3 +519,5 @@ class RaftNode:
             self.thread.join()
         if self.applier_thread:
             self.applier_thread.join()
+
+        self.stop_discovery()
