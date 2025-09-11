@@ -1,0 +1,2 @@
+cluster_name: cluster1
+log_dir: /app/data/log

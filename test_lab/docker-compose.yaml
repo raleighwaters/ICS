@@ -1,5 +1,4 @@
 services:
-
   ics_node_1:
     image: icsd:local
     container_name: node1
@@ -7,7 +6,7 @@ services:
     ports:
       - "5001:5000"
     volumes:
-      - ./config1.yaml:/etc/ics/config.yaml
+      - ./config_cluster1.yaml:/etc/ics/config.yaml
     networks:
       - ics_network
 
@@ -18,7 +17,7 @@ services:
     ports:
       - "5002:5000"
     volumes:
-      - ./config2.yaml:/etc/ics/config.yaml
+      - ./config_cluster1.yaml:/etc/ics/config.yaml
     networks:
       - ics_network
 
@@ -29,10 +28,43 @@ services:
     ports:
       - "5003:5000"
     volumes:
-      - ./config3.yaml:/etc/ics/config.yaml
+      - ./config_cluster1.yaml:/etc/ics/config.yaml
     networks:
       - ics_network
 
+  ics_node_4:
+    image: icsd:local
+    container_name: node4
+    hostname: node4
+    ports:
+      - "5004:5000"
+    volumes:
+      - ./config_cluster2.yaml:/etc/ics/config.yaml
+    networks:
+      - ics_network
+
+  ics_node_5:
+    image: icsd:local
+    container_name: node5
+    hostname: node5
+    ports:
+      - "5005:5000"
+    volumes:
+      - ./config_cluster2.yaml:/etc/ics/config.yaml
+    networks:
+      - ics_network
+
+  ics_node_6:
+    image: icsd:local
+    container_name: node6
+    hostname: node6
+    ports:
+      - "5006:5000"
+    volumes:
+      - ./config_cluster2.yaml:/etc/ics/config.yaml
+    networks:
+      - ics_network
 
 networks:
   ics_network:
+    driver: bridge
