@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 from ics.system import NodeSystem
 from ics.cluster_config import ClusterConfig
+from ics.settings import settings
 
 
 class Node:
@@ -438,7 +439,11 @@ class RaftNode:
         """Periodically announces this node's presence via multicast."""
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-            message = self.local_node.node_id.encode("utf-8")
+
+            # Construct the broadcast message
+            cluster_name = settings.cluster_name
+            node_identifier = f"{self.local_node.node_id}"
+            message = f"{cluster_name}|{node_identifier}".encode("utf-8")
 
             while self.run_discovery:
                 try:
@@ -460,8 +465,18 @@ class RaftNode:
             while self.run_discovery:
                 try:
                     data, _ = sock.recvfrom(1024)
-                    node_id = data.decode("utf-8")
-                    logger.debug(f"Received multicast message: {data}")
+                    message = data.decode("utf-8")
+                    logger.debug(f"Received multicast message: {message}")
+
+                    # Parse the cluster_name and node_id
+                    cluster_name, node_id = message.split("|", 1)
+
+                    # Ensure the cluster name matches
+                    if cluster_name != settings.cluster_name:
+                        logger.debug(f"{self.local_node}: Ignored message from different cluster: {cluster_name}")
+                        continue
+
+                    # Process the discovered node
                     discovered_node = Node.from_string(node_id)
                     if discovered_node != self.local_node:
                         with self.lock:

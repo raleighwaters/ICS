@@ -21,6 +21,7 @@ class ICSSettings(BaseSettings):
     )
 
     hostname: str = Field(default_factory=lambda: socket.gethostname())
+    cluster_name: str = Field("default")
 
     var_dir: Path = Field("/var/opt/ics")
     log_dir: Path = Field("/var/opt/ics/log")
@@ -40,7 +41,6 @@ class ICSSettings(BaseSettings):
     resource_limit: int = Field(5000)
 
     # Derived fields
-    cluster_name: Optional[str] = None
     conf_file: Optional[Path] = None
     uds_file: Optional[Path] = None
     alert_log: Optional[Path] = None
@@ -52,7 +52,6 @@ class ICSSettings(BaseSettings):
         self.uds_file = self.uds_dir / "uds_socket"
         self.alert_log = self.log_dir / "alerts.log"
         self.res_log = self.log_dir / "resource.log"
-        self.cluster_name = self.hostname  # Temporary
 
     @classmethod
     def load(cls) -> "ICSSettings":
