@@ -2,14 +2,19 @@ import logging
 from pydantic import BaseModel, Field
 from typing import Dict
 
-from ics.models import GroupSpec, ResourceSpec
+from ics.models import NodeSpec, GroupSpec, ResourceSpec
 from ics.settings import settings
 
 logger = logging.getLogger(__name__)
 
 class ClusterConfig(BaseModel):
+    nodes: Dict[str, NodeSpec] = Field(default_factory=dict)
     groups: Dict[str, GroupSpec] = Field(default_factory=dict)
     resources: Dict[str, ResourceSpec] = Field(default_factory=dict)
+
+    def _ensure_node_exists(self, node_name: str):
+        if node_name not in self.nodes:
+            raise ValueError(f"Node '{node_name}' not exist")
 
     def _ensure_group_exists(self, group_name: str):
         if group_name not in self.groups:
@@ -18,6 +23,13 @@ class ClusterConfig(BaseModel):
     def _ensure_resource_exists(self, resource_name: str):
         if resource_name not in self.resources:
             raise ValueError(f"Resource '{resource_name}' not found")
+
+    def node_names(self):
+        return self.nodes.keys()
+
+    def node(self, name):
+        self._ensure_node_exists(name)
+        return self.nodes[name].model_dump()
 
     def group_names(self):
         return self.groups.keys()

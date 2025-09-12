@@ -6,8 +6,7 @@ import httpx
 import ics.errors
 from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest, ResourceDesiredState, \
     GroupDesiredState, GroupStateUpdate, GroupStateAction
-from ics.models import ResourceStateUpdate
-from ics.raft_node import Node
+from ics.models import NodeSpec, ResourceStateUpdate
 from ics.cluster_config import ClusterConfig
 from ics.cluster_actions import cluster_group_states, cluster_group_state_change, cluster_group_action
 
@@ -101,7 +100,7 @@ def create_api(raft_node, system):
 
         result = raft_node.handle_request_vote(
             term=data.term,
-            candidate_node=Node.from_string(data.candidate_id),
+            candidate_node=NodeSpec.from_string(data.candidate_id),
             last_log_index=data.last_log_index,
             last_log_term=data.last_log_term,
         )

@@ -10,45 +10,8 @@ from typing import List, Dict, Optional
 logger = logging.getLogger(__name__)
 
 from ics.system import NodeSystem
-from ics.cluster_config import ClusterConfig
+from ics.cluster_config import ClusterConfig, NodeSpec
 from ics.settings import settings
-
-
-class Node:
-    """
-    Represents a node in a raft cluster.
-
-    Attributes:
-        hostname (str): The hostname or IP of the node.
-        port (int): The port number of the node.
-    """
-    def __init__(self, hostname: str, port: int):
-        self.hostname = hostname
-        self.port = port
-
-    @property
-    def node_id(self) -> str:
-        return f"{self.hostname}:{self.port}"
-
-    @classmethod
-    def from_string(cls, node_id: str) -> "Node":
-        """Create a Node instance from a node_id (e.g. 'hostname:port')"""
-        hostname, port =  node_id.split(":")
-        return cls(hostname, int(port))
-
-    def __eq__(self, other):
-        if not isinstance(other, Node):
-            return False
-        return self.hostname == other.hostname and self.port == other.port
-
-    def __hash__(self):
-        return hash((self.hostname, self.port))
-
-    def __str__(self):
-        return self.node_id
-
-    def __repr__(self):
-        return f"Node(hostname={self.hostname}, port={self.port})"
 
 
 class RaftRole(enum.Enum):
@@ -63,7 +26,7 @@ class RaftNode:
     MULTICAST_PORT = 50000         # Port for discovery
     DISCOVERY_INTERVAL = 5.0       # Send a presence announcement every 5 seconds
 
-    def __init__(self, local_node: Node, peers: List[Node], system: Optional[NodeSystem] = None):
+    def __init__(self, local_node: NodeSpec, peers: List[NodeSpec], system: Optional[NodeSystem] = None):
         self.local_node = local_node
         self.peers = peers  # List of remote Nodes
 
@@ -73,7 +36,7 @@ class RaftNode:
 
         # Raft persistent state
         self.current_term = 0
-        self.voted_for: Optional[Node] = None
+        self.voted_for: Optional[NodeSpec] = None
         self.log: List[dict] = []
 
         # Volatile state
@@ -81,8 +44,8 @@ class RaftNode:
         self.last_applied = -1  # Last applied log index
 
         # Leader state
-        self.peer_next_index: Dict[Node, int] = {peer: 0 for peer in peers} # Next log entry to send to peer
-        self.peer_match_index: Dict[Node, int] = {peer: -1 for peer in peers}  # Highest index known to be replicated on the peer
+        self.peer_next_index: Dict[NodeSpec, int] = {peer: 0 for peer in peers} # Next log entry to send to peer
+        self.peer_match_index: Dict[NodeSpec, int] = {peer: -1 for peer in peers}  # Highest index known to be replicated on the peer
 
         # Election state
         self.role = RaftRole.FOLLOWER
@@ -98,7 +61,7 @@ class RaftNode:
         self.run_discovery = False
         self.discovery_thread: Optional[threading.Thread] = None
 
-    def nodes(self) -> list[Node]:
+    def nodes(self) -> list[NodeSpec]:
         """Returns a list of all node IDs in the cluster, including self."""
         return self.peers + [self.local_node]
 
@@ -140,7 +103,7 @@ class RaftNode:
         else:
             return False
 
-    def get_leader_node(self) -> Optional[Node]:
+    def get_leader_node(self) -> Optional[NodeSpec]:
         with self.lock:
             # If this node is the leader, return its own details
             if self.is_leader():
@@ -206,7 +169,7 @@ class RaftNode:
             self.peer_match_index[peer] = -1
         self._send_heartbeats()
 
-    def handle_request_vote(self, term: int, candidate_node: Node, last_log_index: int, last_log_term: int) -> dict:
+    def handle_request_vote(self, term: int, candidate_node: NodeSpec, last_log_index: int, last_log_term: int) -> dict:
         with self.lock:
             vote_granted = False
 
@@ -477,7 +440,7 @@ class RaftNode:
                         continue
 
                     # Process the discovered node
-                    discovered_node = Node.from_string(node_id)
+                    discovered_node = NodeSpec.from_string(node_id)
                     if discovered_node != self.local_node:
                         with self.lock:
                             if discovered_node not in self.peers:

@@ -10,7 +10,8 @@ import Pyro4 as Pyro
 from ics.settings import settings
 from ics.api import create_api
 from ics.logging_config import setup_logging
-from ics.raft_node import RaftNode, Node
+from ics.models import NodeSpec
+from ics.raft_node import RaftNode
 from ics.system import NodeSystem
 from ics.alerts import AlertHandler
 
@@ -78,8 +79,8 @@ def main():
 
     system = NodeSystem()
 
-    peers = [Node.from_string(peer) for peer in settings.peers]
-    raft_node = RaftNode(Node(settings.hostname, settings.api_port), system=system, peers=peers)
+    peers = [NodeSpec.from_string(peer) for peer in settings.peers]
+    raft_node = RaftNode(NodeSpec(hostname=settings.hostname, port=settings.api_port), system=system, peers=peers)
     raft_node.start()
 
     # Start Pyro engine thread

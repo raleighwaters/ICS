@@ -4,14 +4,13 @@ from typing import List
 
 import httpx
 
-from ics.raft_node import Node
-from ics.models import ResourceDesiredState, GroupDesiredState, GroupAttributes, GroupStateAction
+from ics.models import NodeSpec, ResourceDesiredState, GroupDesiredState, GroupAttributes, GroupStateAction
 
 
 logger = logging.getLogger(__name__)
 
 
-async def fan_out_api_call(path: str, nodes: List[Node], method="GET", payload=None):
+async def fan_out_api_call(path: str, nodes: List[NodeSpec], method="GET", payload=None):
     result = {}
 
     async with httpx.AsyncClient(timeout=2) as client:
