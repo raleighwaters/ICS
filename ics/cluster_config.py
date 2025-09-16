@@ -31,6 +31,17 @@ class ClusterConfig(BaseModel):
         self._ensure_node_exists(name)
         return self.nodes[name].model_dump()
 
+    def add_node(self, node: NodeSpec):
+        if node.hostname in self.nodes:
+            raise ValueError(f"Node '{node.hostname}' already exists")
+        self.nodes[node.hostname] = node
+        logger.info(f"Node '{node.node_id}' added")
+
+    def delete_node(self, node_name: str):
+        self._ensure_node_exists(node_name)
+        del self.nodes[node_name]
+        logger.info(f"Node '{node_name}' deleted")
+
     def group_names(self):
         return self.groups.keys()
 
