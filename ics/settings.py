@@ -22,6 +22,7 @@ class ICSSettings(BaseSettings):
 
     hostname: str = Field(default_factory=lambda: socket.gethostname())
     cluster_name: str = Field("default")
+    members: Optional[List[str]] = Field(default_factory=list)
 
     var_dir: Path = Field("/var/opt/ics")
     log_dir: Path = Field("/var/opt/ics/log")
@@ -34,7 +35,6 @@ class ICSSettings(BaseSettings):
     api_port: int = Field(5000)
 
     alert_recipients: Optional[List[str]] = None
-    peers: Optional[List[str]] = Field(default_factory=list)
     alert_level: str = Field("NOTSET")
 
     group_limit: int = Field(200)

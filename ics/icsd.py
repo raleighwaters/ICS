@@ -79,7 +79,11 @@ def main():
 
     system = NodeSystem()
 
-    peers = [NodeSpec.from_string(peer) for peer in settings.peers]
+    peers = [
+        NodeSpec.from_string(peer)
+        for peer in settings.members
+        if NodeSpec.from_string(peer).hostname != settings.hostname
+    ]
     raft_node = RaftNode(NodeSpec(hostname=settings.hostname, port=settings.api_port), system=system, peers=peers)
     raft_node.start()
 
