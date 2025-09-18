@@ -58,6 +58,8 @@ class RaftNode:
 
         self.applier_thread: Optional[threading.Thread] = None
 
+        # Auto discovery
+        self.discovery_peers: List[NodeSpec] = []
         self.run_discovery = False
         self.discovery_thread: Optional[threading.Thread] = None
 
@@ -116,6 +118,16 @@ class RaftNode:
                         return peer
 
         return None
+
+    # def add_cluster_node(self, node: NodeSpec):
+    #     config = self.get_latest_config()
+    #     config.add_node(node)
+    #     self.propose_new_config(config)
+    #
+    # def remove_cluster_node(self, name: str):
+    #     config = self.get_latest_config()
+    #     config.delete_node(name)
+    #     self.propose_new_config(config)
 
     def _reset_election_timeout(self) -> float:
         timeout = random.uniform(5.0, 9.0)
@@ -443,8 +455,8 @@ class RaftNode:
                     discovered_node = NodeSpec.from_string(node_id)
                     if discovered_node != self.local_node:
                         with self.lock:
-                            if discovered_node not in self.peers:
-                                self.peers.append(discovered_node)
+                            if discovered_node not in self.discovery_peers:
+                                self.discovery_peers.append(discovered_node)
                                 logger.info(f"{self.local_node}: Discovered and added new peer {discovered_node}")
                 except Exception as e:
                     logger.error(f"{self.local_node}: Failed to process discovery message: {e}")
@@ -486,7 +498,7 @@ class RaftNode:
                 )
                 self.applier_thread.start()
 
-                self.start_discovery()
+                # self.start_discovery()
 
                 logger.info(f"{self.local_node}: Raft node started")
 
@@ -498,4 +510,4 @@ class RaftNode:
         if self.applier_thread:
             self.applier_thread.join()
 
-        self.stop_discovery()
+        # self.stop_discovery()
