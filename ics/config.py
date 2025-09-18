@@ -3,10 +3,10 @@ import logging
 import os
 
 from ics.settings import settings
-from ics.resource import get_resource
-from ics.resource import grp_add
-from ics.resource import res_add
-from ics.resource import res_link
+from ics.entities import get_resource
+from ics.entities import grp_add
+from ics.entities import res_add
+from ics.entities import res_link
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ from ics.attributes import AttributeObject, system_attributes
 from ics.settings import settings
 from ics.errors import ICSError
 from ics.events import event_handler
-from ics.resource import Resource, Group
+from ics.entities import Resource, Group
 from ics.states import NodeStates, ResourceStates, TRANSITION_STATES, ONLINE_STATES
 from ics.utils import read_config, write_config, hostname
 
