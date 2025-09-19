@@ -5,10 +5,11 @@ import enum
 import logging
 import requests
 import socket
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 
 logger = logging.getLogger(__name__)
 
+from ics import metrics
 from ics.system import NodeSystem
 from ics.cluster_config import ClusterConfig, NodeSpec
 from ics.settings import settings
@@ -35,7 +36,7 @@ class RaftNode:
         self.leader_id = None
 
         # Raft persistent state
-        self.current_term = 0
+        self._current_term = 0
         self.voted_for: Optional[NodeSpec] = None
         self.log: List[dict] = []
 
@@ -119,6 +120,34 @@ class RaftNode:
 
         return None
 
+    @property
+    def current_term(self):
+        return self._current_term
+
+    def set_term(self, term: int):
+        if term != self._current_term:
+            logger.info(f"Setting term to {term}")
+            self._current_term = term
+            metrics.ics_raft_term.labels(cluster_name=settings.cluster_name).set(self._current_term)
+
+    def add_log_entry(self, entries: Union[Dict, List[Dict]]):
+        """Add one or more entries to the Raft log and update metrics.
+
+        Args:
+            entries (Union[Dict, List[Dict]]): A dictionary representing a single log entry,
+                                               or a list of dictionaries representing multiple entries.
+        """
+        if isinstance(entries, dict):
+            self.log.append(entries)
+            logger.info(f"Appended single log entry: {entries}")
+        elif isinstance(entries, list):
+            self.log.extend(entries)
+            logger.info(f"Appended {len(entries)} log entries.")
+        else:
+            raise ValueError("Entries should be a dictionary (single log entry) or a list of dictionaries")
+
+        metrics.ics_raft_log_entries.labels(cluster_name=settings.cluster_name).set(len(self.log))
+
     # def add_cluster_node(self, node: NodeSpec):
     #     config = self.get_latest_config()
     #     config.add_node(node)
@@ -136,7 +165,7 @@ class RaftNode:
 
     def _start_election(self):
         self.role = RaftRole.CANDIDATE
-        self.current_term += 1
+        self.set_term(self.current_term + 1)
         self.voted_for = self.local_node
         votes_received = 1  # Vote for self
         logger.info(f"{self.local_node}: Starting election for term {self.current_term}")
@@ -197,7 +226,7 @@ class RaftNode:
             # Step down if term is newer
             if term > self.current_term:
                 logger.info(f"{self.local_node}: Newer term {term} detected from {candidate_node}, stepping down")
-                self.current_term = term
+                self.set_term(term)
                 self.voted_for = None
                 self.role = RaftRole.FOLLOWER
 
@@ -300,7 +329,7 @@ class RaftNode:
             if term >= self.current_term:
                 if self.current_term != term:
                     logger.info(f"{self.local_node}: Updating to new term {term} from leader {leader_id}")
-                self.current_term = term
+                self.set_term(term)
                 self.role = RaftRole.FOLLOWER
                 self.voted_for = None
                 self.election_timeout = self._reset_election_timeout()
@@ -313,11 +342,11 @@ class RaftNode:
                         log_index = prev_log_index + 1 + i
                         if log_index < len(self.log):
                             if self.log[log_index]['term'] != entry['term']:
-                                self.log = self.log[:log_index]
-                                self.log.extend(entries[i:])
+                                self.log = self.log[:log_index]  # Truncate the log up to the conflicting index
+                                self.add_log_entry(entries[i:])  # Add new entries using the unified method
                                 break
                         else:
-                            self.log.append(entry)
+                            self.add_log_entry(entry)
 
                     if leader_commit > self.commit_index:
                         self.commit_index = min(leader_commit, len(self.log) - 1)
@@ -340,7 +369,7 @@ class RaftNode:
                 raise RuntimeError("Only the leader can append entries")
 
             entry = {"term": self.current_term, "command": command}
-            self.log.append(entry)
+            self.add_log_entry(entry)
             index = len(self.log) - 1
             logger.info(f"{self.local_node}: Appended new entry at index {index}: {entry}")
 
