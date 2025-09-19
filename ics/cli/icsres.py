@@ -3,7 +3,7 @@ import requests
 import sys
 import time
 
-from ics.cli.common import API_BASE, epilog_text, check_response, print_table
+from ics.cli.common import API_BASE, epilog_text, check_response, print_table, format_attribute
 
 
 def res_online(name: str, node: str):
@@ -116,7 +116,7 @@ def res_value(name: str, attribute: str):
 
 
 def res_modify(name: str, attribute: str, value: str):
-    response = requests.patch(f"{API_BASE}/resources/{name}/attributes", json={attribute: value})
+    response = requests.patch(f"{API_BASE}/resources/{name}/attributes", json={format_attribute(attribute): value})
     check_response(response)
 
 

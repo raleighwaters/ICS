@@ -4,7 +4,7 @@ import time
 import requests
 import sys
 
-from ics.cli.common import API_BASE, epilog_text, print_table, check_response
+from ics.cli.common import API_BASE, epilog_text, print_table, check_response, format_attribute
 from icsres import res_modify
 
 def grp_online(name: str, node=None):
@@ -136,7 +136,7 @@ def grp_value(name: str, attribute: str):
 
 
 def grp_modify(name: str, attribute: str, value: str):
-    response = requests.patch(f"{API_BASE}/groups/{name}/attributes", json={attribute: value})
+    response = requests.patch(f"{API_BASE}/groups/{name}/attributes", json={format_attribute(attribute): value})
     check_response(response)
 
 

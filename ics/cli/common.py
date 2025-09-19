@@ -10,6 +10,12 @@ API_BASE = f"http://localhost:{settings.api_port}"
 epilog_text = ''
 
 
+def format_attribute(value: str):
+    """Format attribute value."""
+    if not value:
+        return value
+    return value[0].lower() + value[1:]
+
 def check_response(response: requests.Response, exit_on_fail=True) -> bool:
     if response.status_code in (200, 201, 204):
         return True
