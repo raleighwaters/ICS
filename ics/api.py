@@ -4,7 +4,6 @@ from fastapi import FastAPI, HTTPException, Request, Response
 import httpx
 from prometheus_fastapi_instrumentator import Instrumentator
 
-
 import ics.errors
 from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest, ResourceDesiredState, \
     GroupDesiredState, GroupStateUpdate, GroupStateAction
