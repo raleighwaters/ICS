@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-#export ICS_HOME=${ICS_HOME:-/opt/ICS}
-#source ${ICS_HOME}/test/test_setup.sh
+source /app/script/test_common.sh
 
 RES_FILES=/app/data/res
 

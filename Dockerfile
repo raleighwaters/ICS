@@ -14,10 +14,11 @@ COPY requirements.txt /app/requirements.txt
 RUN pip3 install -r requirements.txt
 
 # Copy application scripts and resources
-COPY ./setup_alias.sh /app
+COPY ./setup_alias.sh /etc/profile.d
 COPY ./ics /app/ics
-COPY ./test_lab/test /app/test
-COPY ./examples /app/examples
+
+# Add ailas commands to .bashrc for non-login shell
+RUN cat /etc/profile.d/setup_alias.sh > /root/.bashrc
 
 # Create required directories
 RUN mkdir -p  /app/data/res /app/data/log

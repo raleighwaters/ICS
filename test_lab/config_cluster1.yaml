@@ -1,2 +1,6 @@
-cluster_name: cluster2
+cluster_name: cluster1
 log_dir: /app/data/log
+members:
+  - node1:5000
+  - node2:5000
+  - node3:5000

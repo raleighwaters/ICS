@@ -1,0 +1,71 @@
+apiVersion: ics/v1
+kind: Group
+metadata:
+  name: app1
+spec:
+  systemList:
+    - RWX1
+  attributes:
+    enabled: true
+    autoStart: true
+    ignoreDisabled: true
+    parallel: false
+
+---
+apiVersion: ics/v1
+kind: Resource
+metadata:
+  name: database1
+  group: app1
+spec:
+  attributes:
+    enabled: true
+    startProgram: "./script/test_res.sh start database1"
+    stopProgram: "./script/test_res.sh stop database1"
+    monitorProgram: "./script/test_res.sh monitor database1"
+
+---
+apiVersion: ics/v1
+kind: Resource
+metadata:
+  name: backend1
+  group: app1
+spec:
+  attributes:
+    enabled: true
+    startProgram: "./script/test_res.sh start backend1"
+    stopProgram: "./script/test_res.sh stop backend1"
+    monitorProgram: "./script/test_res.sh monitor backend1"
+  dependsOn:
+    - database1
+
+---
+apiVersion: ics/v1
+kind: Resource
+metadata:
+  name: backend2
+  group: app1
+spec:
+  attributes:
+    enabled: true
+    startProgram: "./script/test_res.sh start backend2"
+    stopProgram: "./script/test_res.sh stop backend2"
+    monitorProgram: "./script/test_res.sh monitor backend2"
+  dependsOn:
+    - database1
+
+---
+apiVersion: ics/v1
+kind: Resource
+metadata:
+  name: frontend1
+  group: app1
+spec:
+  attributes:
+    enabled: true
+    startProgram: "./script/test_res.sh start frontend1"
+    stopProgram: "./script/test_res.sh stop frontend1"
+    monitorProgram: "./script/test_res.sh monitor frontend1"
+  dependsOn:
+    - backend1
+    - backend2

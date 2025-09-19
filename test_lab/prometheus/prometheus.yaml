@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # Local ICS node
+  - job_name: "ics_nodes_local"
+    static_configs:
+      - targets:
+          - "host.docker.internal:5000"
+
+  # ICS Cluster Nodes
+  - job_name: "ics_nodes"
+    static_configs:
+      - targets:
+          - "host.docker.internal:5001"
+          - "host.docker.internal:5002"
+          - "host.docker.internal:5003"
