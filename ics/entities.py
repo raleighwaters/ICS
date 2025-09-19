@@ -3,7 +3,9 @@ import random
 import subprocess
 import time
 
+from ics import metrics
 from ics import events
+from ics.settings import settings
 from ics.alerts import AlertClient
 from ics.attributes import AttributeObject, resource_attributes, group_attributes
 from ics.states import ResourceStates, GroupStates, ONLINE_STATES
@@ -22,7 +24,7 @@ class Resource(AttributeObject):
         super(Resource, self).__init__()
         self.init_attr(resource_attributes)
         self.name = name
-        self.state = init_state
+        self.state = None
         self.set_attr('Group', group_name)
         self.last_poll = int(time.time()) - random.randint(0, 60)  # Set at random times to prevent poll clustering
         self.poll_running = False
@@ -34,6 +36,13 @@ class Resource(AttributeObject):
         self.cmd_type = None
         self.cmd_end_time = -1
         self.cmd_exit_code = 0
+
+        # Initialize resource state
+        self.set_state(init_state)
+
+        # Initialize metrics
+        metrics.ics_resource_faults_total.labels(resource_name=self.name, cluster_name=settings.cluster_name).inc(0)
+
 
     event_map = {
         ResourceStates.OFFLINE: events.ResourceOfflineEvent,
@@ -64,7 +73,22 @@ class Resource(AttributeObject):
             load=int(self.attr_value("Load")),
         )
 
-    def change_state(self, new_state, force=False):
+    def set_state(self, state: str):
+        self.state = state
+        state_map = {
+            "offline": 0,
+            "starting": 1,
+            "online": 2,
+            "stopping": 3,
+            "faulted": 4,
+            "unknown": 5
+        }
+        metrics.ics_resource_state.labels(
+            resource_name=self.name,
+            cluster_name=settings.cluster_name
+        ).set(state_map[self.state])
+
+    def change_state(self, new_state: ResourceStates, force=False):
         """Change state of resource and add event to queue.
 
         Args:
@@ -99,7 +123,7 @@ class Resource(AttributeObject):
                              ' no change will occur'.format(self.name, new_state))
                 return False
         else:
-            self.state = new_state
+            self.set_state(new_state)
             event_class = self.event_map[new_state]
             logger.info('Resource({}) Changing state from {} to {}'.format(self.name, cur_state, new_state))
 
