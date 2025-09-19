@@ -2,6 +2,8 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Request, Response
 import httpx
+from prometheus_fastapi_instrumentator import Instrumentator
+
 
 import ics.errors
 from ics.models import ResourceSpec, GroupSpec, RequestVoteRequest, AppendEntriesRequest, ResourceDesiredState, \
@@ -66,6 +68,7 @@ async def forward_request_to_leader(raft_node, request: Request):
 def create_api(raft_node, system):
 
     app = FastAPI(title="ICS API", version="3.0.0")
+    Instrumentator().instrument(app).expose(app)
 
     def mutate_config(mutator):
         config = raft_node.get_latest_config()
