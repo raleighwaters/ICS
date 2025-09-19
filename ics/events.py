@@ -4,6 +4,8 @@ try:
 except ImportError:
     import Queue as queue  # Python2 version
 
+from ics import metrics
+from ics.settings import settings
 from ics.alerts import AlertClient
 from ics.states import ResourceStates, ONLINE_STATES, OFFLINE_STATES
 
@@ -29,6 +31,7 @@ def event_handler():
     """Continuously execute events in event queue"""
     while True:
         queue_size = event_queue.qsize()
+        metrics.ics_engine_queue_length.labels(cluster_name=settings.cluster_name).set(queue_size)
         if queue_size > 0:
             logger.debug('Remaining events in event queue ({})'.format(queue_size))
         event = event_queue.get()
@@ -99,6 +102,10 @@ class ResourceOfflineEvent(ResourceStateEvent):
     def run(self):
         if self.last_state in ONLINE_STATES:
             self.resource.fault_count += 1
+            metrics.ics_resource_faults_total.labels(
+                resource_name=self.resource.name,
+                cluster_name=settings.cluster_name
+            ).inc()
             restart_limit = int(self.resource.attr_value('RestartLimit'))
             logger.info('Resource({}) Fault detected ({} of {})'.format(self.resource.name,
                                                                         self.resource.fault_count, restart_limit))
