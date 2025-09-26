@@ -20,9 +20,9 @@ metadata:
 spec:
   attributes:
     enabled: true
-    startProgram: "./test/test_res.sh start database1"
-    stopProgram: "./test/test_res.sh stop database1"
-    monitorProgram: "./test/test_res.sh monitor database1"
+    startProgram: "./script/test_res.sh start database1"
+    stopProgram: "./script/test_res.sh stop database1"
+    monitorProgram: "./script/test_res.sh monitor database1"
 
 ---
 apiVersion: ics/v1
@@ -33,9 +33,9 @@ metadata:
 spec:
   attributes:
     enabled: true
-    startProgram: "./test/test_res.sh start backend1"
-    stopProgram: "./test/test_res.sh stop backend1"
-    monitorProgram: "./test/test_res.sh monitor backend1"
+    startProgram: "./script/test_res.sh start backend1"
+    stopProgram: "./script/test_res.sh stop backend1"
+    monitorProgram: "./script/test_res.sh monitor backend1"
   dependsOn:
     - database1
 
@@ -48,9 +48,9 @@ metadata:
 spec:
   attributes:
     enabled: true
-    startProgram: "./test/test_res.sh start backend2"
-    stopProgram: "./test/test_res.sh stop backend2"
-    monitorProgram: "./test/test_res.sh monitor backend2"
+    startProgram: "./script/test_res.sh start backend2"
+    stopProgram: "./script/test_res.sh stop backend2"
+    monitorProgram: "./script/test_res.sh monitor backend2"
   dependsOn:
     - database1
 
@@ -63,9 +63,9 @@ metadata:
 spec:
   attributes:
     enabled: true
-    startProgram: "./test/test_res.sh start frontend1"
-    stopProgram: "./test/test_res.sh stop frontend1"
-    monitorProgram: "./test/test_res.sh monitor frontend1"
+    startProgram: "./script/test_res.sh start frontend1"
+    stopProgram: "./script/test_res.sh stop frontend1"
+    monitorProgram: "./script/test_res.sh monitor frontend1"
   dependsOn:
     - backend1
     - backend2
