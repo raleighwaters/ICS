@@ -7,31 +7,37 @@ from ics import metrics
 from ics import events
 from ics.settings import settings
 from ics.alerts import AlertClient
-from ics.attributes import AttributeObject, resource_attributes, group_attributes
 from ics.states import ResourceStates, GroupStates, ONLINE_STATES
 from ics.utils import resource_log_name
 
-from ics.models import ResourceSpec, GroupSpec
+from ics.models import ClusterConfig, GroupSpec, ResourceSpec
+from ics.models import GroupAttributes, ResourceAttributes
 
 logger = logging.getLogger(__name__)
 
 alert = AlertClient()
 
 
-class Resource(AttributeObject):
+class Resource:
 
-    def __init__(self, name, group_name, init_state=ResourceStates.UNKNOWN):
-        super(Resource, self).__init__()
-        self.init_attr(resource_attributes)
+    def __init__(self, name: str, config_store: ClusterConfig, init_state=ResourceStates.UNKNOWN):
         self.name = name
+
+        # Config reference (read-only)
+        self._config_store = config_store
+
+        # Runtime state only
         self.state = None
-        self.set_attr('Group', group_name)
         self.last_poll = int(time.time()) - random.randint(0, 60)  # Set at random times to prevent poll clustering
         self.poll_running = False
         self.fault_count = 0
+
+        # Runtime relationships
         self.parents = []
         self.children = []
         self.propagate = False
+
+        # Command execution state
         self.cmd_process = None
         self.cmd_type = None
         self.cmd_end_time = -1
@@ -43,7 +49,6 @@ class Resource(AttributeObject):
         # Initialize metrics
         metrics.ics_resource_faults_total.labels(resource_name=self.name, cluster_name=settings.cluster_name).inc(0)
 
-
     event_map = {
         ResourceStates.OFFLINE: events.ResourceOfflineEvent,
         ResourceStates.STARTING: events.ResourceStartingEvent,
@@ -53,25 +58,15 @@ class Resource(AttributeObject):
         ResourceStates.UNKNOWN: events.ResourceUnknownEvent
     }
 
-    def to_spec(self) -> ResourceSpec:
-        return ResourceSpec(
-            name=self.name,
-            group=self.attr_value("Group"),
-            enabled=self.attr_value("Enabled") == "true",
-            startProgram=self.attr_value("StartProgram"),
-            stopProgram=self.attr_value("StopProgram"),
-            monitorProgram=self.attr_value("MonitorProgram"),
-            faultPropagation=self.attr_value("FaultPropagation") == "true",
-            onlineRetryLimit=int(self.attr_value("OnlineRetryLimit")),
-            restartLimit=int(self.attr_value("RestartLimit")),
-            monitorOnly=self.attr_value("MonitorOnly") == "true",
-            monitorInterval=int(self.attr_value("MonitorInterval")),
-            offlineMonitorInterval=int(self.attr_value("OfflineMonitorInterval")),
-            onlineTimeout=int(self.attr_value("OnlineTimeout")),
-            offlineTimeout=int(self.attr_value("OfflineTimeout")),
-            monitorTimeout=int(self.attr_value("MonitorTimeout")),
-            load=int(self.attr_value("Load")),
-        )
+    @property
+    def config(self) -> ResourceSpec:
+        """Get current configuration from config store"""
+        return self._config_store.resources[self.name]
+
+    @property
+    def attributes(self) -> ResourceAttributes:
+        """Convenient access to attributes"""
+        return self.config.attributes
 
     def set_state(self, state: str):
         self.state = state
@@ -104,7 +99,7 @@ class Resource(AttributeObject):
             if new_state is cur_state:
                 return False
 
-        if self.attr_value('Enabled') == 'false' or self.attr_value('MonitorOnly') == 'true':
+        if self.attributes.enabled == 'false' or self.attributes.monitorOnly == 'true':
             self.state = ResourceStates.OFFLINE  # Set resource offline regardless of current state
             logger.info('Resource({}) Unable to change state, resource is disabled'.format(self.name))
 
@@ -229,9 +224,9 @@ class Resource(AttributeObject):
         """Update resource poll timer."""
         cur_time = int(time.time())
         if self.state in ONLINE_STATES:
-            poll_interval = int(self.attr_value('MonitorInterval'))
+            poll_interval = int(self.attributes.monitorInterval)
         else:
-            poll_interval = int(self.attr_value('OfflineMonitorInterval'))
+            poll_interval = int(self.attributes.offlineMonitorInterval)
 
         if cur_time - self.last_poll >= poll_interval and not self.poll_running:
             self.poll_running = True
@@ -359,7 +354,7 @@ class Resource(AttributeObject):
 
     def probe(self):
         """Generate a resource poll."""
-        if self.attr_value('Enabled') == 'false':
+        if self.attributes.enabled == 'false':
             logger.info('Resource({}) Unable to probe, resource is not enabled.'.format(self.name))
         else:
             self.poll_running = True
@@ -368,35 +363,35 @@ class Resource(AttributeObject):
     def start(self):
         """Run command to start resource."""
         logger.info('Resource({}) running command to start resource'.format(self.name))
-        cmd = self.attr_value('StartProgram').split()
+        cmd = self.attributes.startProgram.split()
         if not cmd:
             logger.error('Resource({}) unable to start, attribute StartProgram not set'.format(self.name))
             self.flush()
             return
-        online_timeout = int(self.attr_value('OnlineTimeout'))
+        online_timeout = int(self.attributes.online_timeout)
         self._run_cmd(cmd, 'start', timeout=online_timeout)
 
     def stop(self):
         """Run command to stop resource."""
         logger.info('Resource({}) running command to stop resource'.format(self.name))
-        cmd = self.attr_value('StopProgram').split()
+        cmd = self.attributes.stopProgram.split()
         if not cmd:
             logger.error('Resource({}) unable to start, attribute StopProgram not set'.format(self.name))
             self.flush()
             return
-        offline_timeout = int(self.attr_value('OfflineTimeout'))
+        offline_timeout = int(self.attributes.offlineTimeout)
         self._run_cmd(cmd, 'stop', timeout=offline_timeout)
 
     def poll(self):
         """Run command to poll resource."""
         logger.debug('Resource({}) running command to poll resource'.format(self.name))
-        cmd = self.attr_value('MonitorProgram').split()
+        cmd = self.attributes.monitorProgram.split()
         if not cmd:
             logger.error('Resource({}) unable to monitor, attribute MonitorProgram not set'.format(self.name))
             self.poll_running = False
             self.flush()
             return
-        monitor_timeout = int(self.attr_value('MonitorTimeout'))
+        monitor_timeout = int(self.attributes.monitorTimeout)
         self._run_cmd(cmd, 'poll', timeout=monitor_timeout)
 
     def reset_poll_counter(self):
@@ -404,23 +399,23 @@ class Resource(AttributeObject):
         self.last_poll = int(time.time())
 
 
-class Group(AttributeObject):
+class Group:
 
-    def __init__(self, name):
-        super(Group, self).__init__()
-        self.init_attr(group_attributes)
+    def __init__(self, name, config_store: ClusterConfig):
         self.name = name
         self.members = []  # TODO: rename member for group class?
 
-    def to_spec(self) -> GroupSpec:
-        return GroupSpec(
-            name=self.name,
-            systemList=self.attr_value("SystemList"),
-            enabled=self.attr_value("Enabled") == "true",
-            autoStart=self.attr_value("AutoStart") == "true",
-            ignoreDisabled=self.attr_value("IgnoreDisabled") == "true",
-            parallel=self.attr_value("Parallel") == "true",
-        )
+        self._config_store = config_store
+
+    @property
+    def config(self) -> GroupSpec:
+        """Get current configuration from config store"""
+        return self._config_store.groups[self.name]
+
+    @property
+    def attributes(self) -> GroupAttributes:
+        """Convenient access to attributes"""
+        return self.config.attributes
 
     def state(self):
         """Get state of group by checking state of member resources.
@@ -435,7 +430,7 @@ class Group(AttributeObject):
         # Get all unique resource states
         resource_states = []
         for member in self.members:
-            if self.attr_value('IgnoreDisabled') == 'true' and member.attr_value('Enabled') == 'false':
+            if self.attributes.ignoreDisabled == 'true' and member.attribute.enabled == 'false':
                 continue
             else:
                 resource_states.append(member.state)
@@ -471,7 +466,7 @@ class Group(AttributeObject):
         """
         total_load = 0
         for member in self.members:
-            total_load += int(member.attr_value('Load'))
+            total_load += int(member.attributes.load)
 
         return total_load
 
@@ -493,19 +488,19 @@ class Group(AttributeObject):
         """
         self.members.remove(resource)
 
-    def enable_resources(self):
-        """Enable group resources."""
-        for member in self.members:
-            member.set_attr('Enabled', 'true')
+    # def enable_resources(self):
+    #     """Enable group resources."""
+    #     for member in self.members:
+    #         member.set_attr('Enabled', 'true')
 
-    def disable_resources(self):
-        """Disable group resources."""
-        for member in self.members:
-            member.set_attr('Enabled', 'false')
+    # def disable_resources(self):
+    #     """Disable group resources."""
+    #     for member in self.members:
+    #         member.set_attr('Enabled', 'false')
 
     def start(self):
         """Start group resources."""
-        if self.attr_value('Enabled') == 'false':
+        if self.attributes.enabled == 'false':
             logger.info('Unable to start, group is not enabled')
             return
 
@@ -524,7 +519,7 @@ class Group(AttributeObject):
 
     def stop(self):
         """Stop group resources."""
-        if self.attr_value('Enabled') == 'false':
+        if self.attributes.enabled == 'false':
             logger.info('Unable to start, group is not enabled')
             return
 
